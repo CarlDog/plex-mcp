@@ -47,12 +47,24 @@ downloader-mcp.
 - **Wired into Claude Desktop** via `mcp-remote` bridge
   (`npx -y mcp-remote http://carldog-nas:3001/mcp --allow-http`).
   End-to-end verified through the assistant: 14 libraries returned.
+- **v0.2 shipped: 6 new tools (5 → 11 total).** Reads:
+  `plex_browse` (paged section listing, optional type filter),
+  `plex_get_children` (drill into shows/seasons/artists/albums),
+  `plex_now_playing`, `plex_history` (paged, viewedAt:desc).
+  Writes: `plex_mark_watched`, `plex_mark_unwatched` (reversible,
+  trivially undone). Delete operations explicitly out of scope.
+  Pagination uses `X-Plex-Container-Start`/`Size` as headers (Plex
+  ignores Size alone — both must be present together; codified in
+  `PlexClient` defaults).
+- **Repo line-ending hygiene:** added `.gitattributes` enforcing LF,
+  so prettier `endOfLine: "lf"` doesn't fail on Windows working trees
+  with autocrlf.
 
 ## Next
 
-- Decide on adding playback control / library-management tools (still
-  out of scope; current set is read-only browse + search).
 - Add tests once a real Plex test target is set up (don't mock).
+- v0.3 scope to plan: playlists (list/CRUD), Plex hubs (Continue
+  Watching / Top Picks), maybe ratings + edit-metadata.
 
 ## Open Decisions
 
