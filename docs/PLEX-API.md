@@ -122,6 +122,10 @@ by default.
 | `plex_add_to_playlist` | `PUT /playlists/{id}/items?uri=server://...`                          | `uri=` uses `metadataUri()` helper for shape                           |
 | `plex_remove_from_playlist` | `DELETE /playlists/{id}/items/{playlistItemID}`                  | Path uses `playlistItemID`, not `ratingKey`                            |
 | `plex_delete_playlist` | `DELETE /playlists/{id}`                                              | Metadata only; media files untouched                                   |
+| `plex_hubs`            | `GET /hubs`                                                           | Server-wide curated rows (Continue Watching, Recently Released, etc.)  |
+| `plex_section_hubs`    | `GET /hubs/sections/{id}`                                             | Same shape, scoped to a single section                                 |
+| `plex_related`         | `GET /library/metadata/{key}/related`                                 | Provenance-grouped "related" hubs for an item                          |
+| `plex_similar`         | `GET /library/metadata/{key}/similar`                                 | Algorithmic similarity (flat Metadata list)                            |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.
@@ -135,14 +139,12 @@ against plexapi.dev / python-plexapi before relying on the shape.
 | Capability                              | Endpoint(s)                                                                              | Risk class               |
 | --------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ |
 | Smart playlists (filter expressions)    | `POST /playlists?type=&smart=1&uri=` (filter shape via `library:///` URI)                | Medium (complex shape)   |
-| Plex hubs (Continue Watching, etc.)     | `GET /hubs`, `GET /hubs/sections/{id}`                                                   | Low                      |
 | Rate item                               | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` (0–10 → 0–5 stars) | Low                      |
 | Edit metadata field                     | `PUT /library/metadata/{key}?<field>.value=...`                                          | Medium (LLM might mangle) |
 | Refresh / scan section                  | `GET /library/sections/{id}/refresh[?force=1]`                                           | Medium (server load)     |
 | Empty section trash                     | `PUT /library/sections/{id}/emptyTrash`                                                  | Medium (irreversible)    |
 | Update playback timeline                | `GET /:/timeline?ratingKey=...&time=...&state=playing\|paused\|stopped`                  | Low                      |
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |
-| Related / similar items                 | `GET /library/metadata/{key}/related`, `/similar`                                        | Low                      |
 | Currently transcoding sessions          | `GET /transcode/sessions`                                                                | Low                      |
 
 **Out of scope** (per scoping decision in v0.2): `DELETE /library/metadata/{key}`,

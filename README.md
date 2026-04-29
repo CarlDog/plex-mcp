@@ -26,6 +26,10 @@ your Plex libraries.
 | `plex_add_to_playlist` | Append an item to a regular playlist |
 | `plex_remove_from_playlist` | Remove an item by `playlistItemID` |
 | `plex_delete_playlist` | Delete a playlist (metadata only — media untouched) |
+| `plex_hubs` | Plex's curated server-wide hubs (Continue Watching, Recently Released, etc.) |
+| `plex_section_hubs` | Curated hubs scoped to one library section |
+| `plex_related` | Plex's curated "related" hubs for an item (provenance-grouped) |
+| `plex_similar` | Algorithmic similar items for an item (flat list) |
 
 ## Configuration
 
@@ -148,6 +152,30 @@ cp .env.example .env  # then edit
 PLEX_URL=... PLEX_TOKEN=... npm run dev               # stdio
 MCP_PORT=3000 PLEX_URL=... PLEX_TOKEN=... npm run dev # HTTP
 ```
+
+## Logging
+
+The server emits structured logs to **stderr** (stdout is the MCP
+wire protocol in stdio mode and must not be polluted). Format:
+
+```
+2026-04-29T15:30:00.000Z INFO [tool:plex_browse] invoke section_id=7 type=show limit=2
+2026-04-29T15:30:00.337Z INFO [tool:plex_browse] ok ms=337
+```
+
+Configure verbosity via the `LOG_LEVEL` env var (default `info`):
+
+| Level | Shows |
+|---|---|
+| `error` | Errors only |
+| `warn` | + 4xx Plex responses |
+| `info` (default) | + Tool invocations and completions |
+| `debug` | + Every Plex API call with method, path, status, ms |
+| `trace` | (reserved) |
+
+Container logs are captured by Docker's `json-file` driver and
+rotated automatically (10MB × 3 files = ~30MB cap; oldest deleted
+on rotation). View with `docker logs plex-mcp` or `docker logs -f`.
 
 ## Security
 

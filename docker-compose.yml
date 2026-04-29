@@ -20,3 +20,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      # Cap container log size and rotate. With max-size=10m and
+      # max-file=3, total log usage stays under ~30MB; oldest files are
+      # automatically deleted when the limit is hit. Logs themselves go
+      # to stderr (per the application's logging convention) and Docker
+      # captures them via the json-file driver.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

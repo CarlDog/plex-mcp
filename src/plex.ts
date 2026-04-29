@@ -1,3 +1,5 @@
+import { log } from "./log.js";
+
 export interface PlexConfig {
   url: string;
   token: string;
@@ -106,20 +108,41 @@ export class PlexClient {
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
-    const res = await fetch(url, {
-      method,
-      headers: {
-        "X-Plex-Token": this.config.token,
-        Accept: "application/json",
-        ...headers,
-      },
-    });
+    const start = Date.now();
+    log.debug("plex", "request", { method, path });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: {
+          "X-Plex-Token": this.config.token,
+          Accept: "application/json",
+          ...headers,
+        },
+      });
+    } catch (err) {
+      log.error("plex", "network error", {
+        method,
+        path,
+        ms: Date.now() - start,
+        msg: (err as Error).message,
+      });
+      throw err;
+    }
+    const ms = Date.now() - start;
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      log.warn("plex", "http error", {
+        method,
+        path,
+        status: res.status,
+        ms,
+      });
       throw new Error(
         `Plex ${res.status} ${res.statusText} for ${method} ${path}: ${body.slice(0, 200)}`,
       );
     }
+    log.debug("plex", "ok", { method, path, status: res.status, ms });
     // Plex sometimes returns empty bodies even for non-GET. Guard
     // against parse errors by reading text first and returning an
     // empty PlexResponse if unparseable.
@@ -141,16 +164,72 @@ export class PlexClient {
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
-    const res = await fetch(url, {
-      method,
-      headers: { "X-Plex-Token": this.config.token },
-    });
+    const start = Date.now();
+    log.debug("plex", "request", { method, path });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: { "X-Plex-Token": this.config.token },
+      });
+    } catch (err) {
+      log.error("plex", "network error", {
+        method,
+        path,
+        ms: Date.now() - start,
+        msg: (err as Error).message,
+      });
+      throw err;
+    }
+    const ms = Date.now() - start;
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      log.warn("plex", "http error", {
+        method,
+        path,
+        status: res.status,
+        ms,
+      });
       throw new Error(
         `Plex ${res.status} ${res.statusText} for ${method} ${path}: ${body.slice(0, 200)}`,
       );
     }
+    log.debug("plex", "ok", { method, path, status: res.status, ms });
+  }
+
+  async hubs(): Promise<unknown[]> {
+    const data = await this.request<{ Hub?: unknown[] }>("/hubs");
+    return data.MediaContainer?.Hub ?? [];
+  }
+
+  async sectionHubs(sectionId: string): Promise<unknown[]> {
+    const data = await this.request<{ Hub?: unknown[] }>(
+      `/hubs/sections/${sectionId}`,
+    );
+    return data.MediaContainer?.Hub ?? [];
+  }
+
+  /**
+   * Plex's "related" hubs for a single item — typically grouped by
+   * provenance ("More with this director", "From this collection").
+   * The response shape is a list of hubs, each containing items.
+   */
+  async related(ratingKey: string): Promise<unknown[]> {
+    const data = await this.request<{ Hub?: unknown[] }>(
+      `/library/metadata/${ratingKey}/related`,
+    );
+    return data.MediaContainer?.Hub ?? [];
+  }
+
+  /**
+   * Plex's algorithmic "similar" items for a single item. Flat list,
+   * not hub-grouped.
+   */
+  async similar(ratingKey: string): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      `/library/metadata/${ratingKey}/similar`,
+    );
+    return data.MediaContainer?.Metadata ?? [];
   }
 
   async listLibraries(): Promise<unknown[]> {
