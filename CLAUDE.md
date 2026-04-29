@@ -29,6 +29,30 @@ phase, what's done, and what's next.
 - `.githooks/pre-commit` — gitleaks + PII pattern scan.
 - `.gitleaks.toml` — secret-scanning config.
 
+## When to add a `tools/` layer
+
+Today the structure is flat: `src/plex.ts` holds the API client and
+`src/index.ts` registers tools inline (inside `createServer()`). That's
+idiomatic when each tool is a thin wrapper over a single API call.
+
+**Trigger to refactor:** the first tool that doesn't fit cleanly inline
+in `index.ts`. Concretely:
+
+- A tool that does **non-trivial composition** of multiple Plex API
+  calls — cross-references, ranking, filtering beyond what the API
+  exposes natively (e.g. "what should I watch tonight" combining
+  on-deck + watch history + recently added with custom logic).
+- Adding a **second integration** (e.g. Tautulli for stats). At that
+  point one-file-per-integration plus a `src/tools/` directory becomes
+  the natural shape.
+
+When that moment arrives, pull tool registrations out of `index.ts`
+into `src/tools/<descriptive-name>.ts`. Mechanical refactor.
+
+Don't pre-split before that trigger. Three similar lines is better than
+a premature abstraction — and the right split shape is easier to see
+once the first complex tool exists than before.
+
 ## Transport modes
 
 The same image supports two transports, selected at start time:
