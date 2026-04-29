@@ -28,7 +28,22 @@ To find your Plex token, see Plex's
 [Finding an authentication token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
 guide.
 
-## Run with Docker
+## Transport modes
+
+| Mode | When to use | How to start |
+| --- | --- | --- |
+| **stdio** (default) | Direct invocation by Claude Desktop / MCP clients | `docker run -i --rm ... plex-mcp` (no `MCP_PORT`) |
+| **Streamable HTTP** | Long-lived deployment (Portainer, Compose, k8s) | Set `MCP_PORT=3000` (already done in `docker-compose.yml`) |
+
+In HTTP mode the server exposes:
+- `POST/GET/DELETE /mcp` — MCP Streamable HTTP endpoint (per spec)
+- `GET /health` — liveness probe (used by docker healthcheck)
+
+> HTTP mode currently has **no auth**. Bind only to a private network.
+> Rely on host firewall or LAN isolation. Don't expose to the public
+> internet without adding bearer-token auth first.
+
+## Run with Docker (stdio, on demand)
 
 ```bash
 docker build -t plex-mcp .
@@ -38,9 +53,30 @@ docker run -i --rm \
   plex-mcp
 ```
 
+## Run with Docker Compose (HTTP, long-lived)
+
+```bash
+# Required env vars (or use a .env file):
+export PLEX_URL=http://192.168.1.50:32400
+export PLEX_TOKEN=your-token
+export HOST_PORT=3001  # optional, defaults to 3001
+
+docker compose up --build
+```
+
+The MCP endpoint will be at `http://<host>:${HOST_PORT}/mcp`.
+
+## Deploy via Portainer (Stack from Git)
+
+1. In Portainer, *Stacks → Add Stack → Repository*.
+2. Repository URL: `https://github.com/CarlDog/plex-mcp`
+3. Compose path: `docker-compose.yml`
+4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`, optionally `HOST_PORT`.
+5. Deploy. Healthcheck reaches green within ~10 seconds.
+
 ## Use with Claude Desktop
 
-Add to your `claude_desktop_config.json`:
+### stdio (local invocation)
 
 ```json
 {
@@ -49,8 +85,7 @@ Add to your `claude_desktop_config.json`:
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-e", "PLEX_URL",
-        "-e", "PLEX_TOKEN",
+        "-e", "PLEX_URL", "-e", "PLEX_TOKEN",
         "plex-mcp"
       ],
       "env": {
@@ -62,12 +97,27 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
+### HTTP (remote MCP server)
+
+```json
+{
+  "mcpServers": {
+    "plex": {
+      "url": "http://nas.local:3001/mcp"
+    }
+  }
+}
+```
+
+(Requires Claude Desktop or a client that supports remote MCP HTTP.)
+
 ## Local development
 
 ```bash
 npm install
 cp .env.example .env  # then edit
-PLEX_URL=... PLEX_TOKEN=... npm run dev
+PLEX_URL=... PLEX_TOKEN=... npm run dev               # stdio
+MCP_PORT=3000 PLEX_URL=... PLEX_TOKEN=... npm run dev # HTTP
 ```
 
 ## Security

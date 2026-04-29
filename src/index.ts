@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { randomUUID } from "node:crypto";
+import express, { type Request, type Response } from "express";
 import { z } from "zod";
 import { PlexClient } from "./plex.js";
 
@@ -14,75 +18,151 @@ if (!PLEX_URL || !PLEX_TOKEN) {
 
 const plex = new PlexClient({ url: PLEX_URL, token: PLEX_TOKEN });
 
-const server = new McpServer({
-  name: "plex-mcp",
-  version: "0.1.0",
-});
-
 const asText = (data: unknown) => ({
   content: [
     { type: "text" as const, text: JSON.stringify(data, null, 2) },
   ],
 });
 
-server.registerTool(
-  "plex_list_libraries",
-  {
-    title: "List Plex Libraries",
-    description: "List all libraries (sections) on the Plex server.",
-    inputSchema: {},
-  },
-  async () => asText(await plex.listLibraries()),
-);
+function createServer(): McpServer {
+  const server = new McpServer({
+    name: "plex-mcp",
+    version: "0.1.0",
+  });
 
-server.registerTool(
-  "plex_search",
-  {
-    title: "Plex Search",
-    description:
-      "Search across all Plex libraries for movies, shows, episodes, music, etc.",
-    inputSchema: { query: z.string().describe("Search query") },
-  },
-  async ({ query }) => asText(await plex.search(query)),
-);
-
-server.registerTool(
-  "plex_recently_added",
-  {
-    title: "Plex Recently Added",
-    description:
-      "List recently added items, optionally filtered to a specific library section.",
-    inputSchema: {
-      section_id: z
-        .string()
-        .optional()
-        .describe("Optional library section ID to filter to"),
+  server.registerTool(
+    "plex_list_libraries",
+    {
+      title: "List Plex Libraries",
+      description: "List all libraries (sections) on the Plex server.",
+      inputSchema: {},
     },
-  },
-  async ({ section_id }) => asText(await plex.recentlyAdded(section_id)),
-);
+    async () => asText(await plex.listLibraries()),
+  );
 
-server.registerTool(
-  "plex_on_deck",
-  {
-    title: "Plex On Deck",
-    description:
-      'Get items "on deck" — partially watched or next-up content.',
-    inputSchema: {},
-  },
-  async () => asText(await plex.onDeck()),
-);
-
-server.registerTool(
-  "plex_get_item",
-  {
-    title: "Get Plex Item",
-    description: "Get full metadata for a specific item by rating key.",
-    inputSchema: {
-      rating_key: z.string().describe("The Plex rating key (item ID)"),
+  server.registerTool(
+    "plex_search",
+    {
+      title: "Plex Search",
+      description:
+        "Search across all Plex libraries for movies, shows, episodes, music, etc.",
+      inputSchema: { query: z.string().describe("Search query") },
     },
-  },
-  async ({ rating_key }) => asText(await plex.getItem(rating_key)),
-);
+    async ({ query }) => asText(await plex.search(query)),
+  );
 
-await server.connect(new StdioServerTransport());
+  server.registerTool(
+    "plex_recently_added",
+    {
+      title: "Plex Recently Added",
+      description:
+        "List recently added items, optionally filtered to a specific library section.",
+      inputSchema: {
+        section_id: z
+          .string()
+          .optional()
+          .describe("Optional library section ID to filter to"),
+      },
+    },
+    async ({ section_id }) => asText(await plex.recentlyAdded(section_id)),
+  );
+
+  server.registerTool(
+    "plex_on_deck",
+    {
+      title: "Plex On Deck",
+      description:
+        'Get items "on deck" — partially watched or next-up content.',
+      inputSchema: {},
+    },
+    async () => asText(await plex.onDeck()),
+  );
+
+  server.registerTool(
+    "plex_get_item",
+    {
+      title: "Get Plex Item",
+      description: "Get full metadata for a specific item by rating key.",
+      inputSchema: {
+        rating_key: z.string().describe("The Plex rating key (item ID)"),
+      },
+    },
+    async ({ rating_key }) => asText(await plex.getItem(rating_key)),
+  );
+
+  return server;
+}
+
+const portStr = process.env.MCP_PORT;
+const port = portStr ? Number.parseInt(portStr, 10) : null;
+if (portStr && (port === null || Number.isNaN(port))) {
+  console.error(`Invalid MCP_PORT: ${portStr}`);
+  process.exit(1);
+}
+
+if (port) {
+  // HTTP transport (long-lived server, e.g. for Portainer/Compose deployment).
+  const app = express();
+  app.use(express.json());
+
+  const transports: Record<string, StreamableHTTPServerTransport> = {};
+
+  app.all("/mcp", async (req: Request, res: Response) => {
+    try {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      let transport: StreamableHTTPServerTransport;
+
+      if (sessionId && transports[sessionId]) {
+        transport = transports[sessionId];
+      } else if (
+        !sessionId &&
+        req.method === "POST" &&
+        isInitializeRequest(req.body)
+      ) {
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (id) => {
+            transports[id] = transport;
+          },
+        });
+        transport.onclose = () => {
+          if (transport.sessionId) {
+            delete transports[transport.sessionId];
+          }
+        };
+        const server = createServer();
+        await server.connect(transport);
+      } else {
+        res.status(400).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message:
+              "Bad Request: missing or unknown session, or non-initialize POST",
+          },
+          id: null,
+        });
+        return;
+      }
+
+      await transport.handleRequest(req, res, req.body);
+    } catch (err) {
+      console.error("MCP request error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  });
+
+  app.get("/health", (_req: Request, res: Response) => {
+    res.json({ status: "ok", transport: "http", port });
+  });
+
+  app.listen(port, () => {
+    console.error(`plex-mcp HTTP transport listening on :${port}`);
+  });
+} else {
+  // Default: stdio transport (for direct invocation by MCP clients via `docker run -i`).
+  const server = createServer();
+  await server.connect(new StdioServerTransport());
+}

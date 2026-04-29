@@ -22,11 +22,31 @@ phase, what's done, and what's next.
 
 ## Layout
 
-- `src/index.ts` — MCP server entry point, registers tools, stdio transport
-- `src/plex.ts` — Plex HTTP API client
-- `Dockerfile` — multi-stage build for the runtime image
-- `.githooks/pre-commit` — gitleaks scan (activate with `git config core.hooksPath .githooks`)
-- `.gitleaks.toml` — secret-scanning config
+- `src/index.ts` — MCP server entry. Decides transport based on `MCP_PORT`.
+- `src/plex.ts` — Plex HTTP API client.
+- `Dockerfile` — multi-stage build for the runtime image.
+- `docker-compose.yml` — Compose/Portainer deployment using HTTP transport.
+- `.githooks/pre-commit` — gitleaks + PII pattern scan.
+- `.gitleaks.toml` — secret-scanning config.
+
+## Transport modes
+
+The same image supports two transports, selected at start time:
+
+- **stdio (default)** — used when `MCP_PORT` is unset. The server reads
+  MCP wire from stdin and writes to stdout. This is the standard mode
+  for `docker run -i` invocation by an MCP client (Claude Desktop, etc.).
+- **HTTP (Streamable HTTP)** — used when `MCP_PORT` is set to a port
+  number. The server listens on `0.0.0.0:$MCP_PORT` with two endpoints:
+  - `POST/GET/DELETE /mcp` — MCP Streamable HTTP per spec; per-session
+    `mcp-session-id` header. Clients initialize via `POST /mcp` (no
+    session header) which mints a UUID; subsequent requests reuse it.
+  - `GET /health` — liveness probe (used by docker healthcheck).
+
+  Per-session McpServer instances are created via the `createServer()`
+  factory; the shared `PlexClient` is module-scope.
+
+The two modes are mutually exclusive in a given process.
 
 ## Common Commands
 
@@ -36,17 +56,27 @@ npm run build          # tsc → dist/
 npm run dev            # tsx src/index.ts (requires PLEX_URL, PLEX_TOKEN)
 npm run typecheck      # tsc --noEmit
 docker build -t plex-mcp .
+
+# stdio (manual smoke test):
+docker run -i --rm -e PLEX_URL=... -e PLEX_TOKEN=... plex-mcp
+
+# HTTP (compose-style):
+docker compose up --build
 ```
 
 ## Conventions
 
-- All logging goes to **stderr** (`console.error`). stdout is the MCP
-  wire protocol — writing to it corrupts the transport.
+- All logging goes to **stderr** (`console.error`). In stdio mode,
+  stdout is the MCP wire protocol — writing to it corrupts the
+  transport. Even in HTTP mode, keep logs on stderr for consistency.
 - Tool names use `plex_` prefix and snake_case.
 - Tool inputs validated with `zod`. Outputs returned as a single
   JSON-stringified text content block.
 - Plex auth via env vars `PLEX_URL` and `PLEX_TOKEN`. The container is
   stateless; the token never lands on disk in the image.
+- HTTP mode currently has **no auth** — bind only to private networks.
+  Rely on host firewall / LAN isolation. Add a bearer token if ever
+  exposed beyond a trusted network.
 
 ## Testing
 

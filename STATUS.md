@@ -4,8 +4,10 @@
 
 ## Phase
 
-Scaffolded — code builds, deps resolved, repo published, MCP tooling
-wired. Pending live smoke test against a real Plex server.
+HTTP transport added (pilot for the `*-mcp` family). Same image now
+supports stdio and Streamable HTTP, selected by the `MCP_PORT` env var.
+`docker-compose.yml` added for Portainer/Compose deployment. Pending
+live smoke test of HTTP path against a real Plex server.
 
 ## Done
 
@@ -24,15 +26,27 @@ wired. Pending live smoke test against a real Plex server.
   `task_completion`). `.serena/` committed.
 - OpenChronicle MCP server registered local-scope for this directory
   (`claude mcp add openchronicle -- oc mcp serve`).
+- **Dual transport:** stdio (default) + Streamable HTTP (when `MCP_PORT`
+  set). Per-session McpServer factory; `/mcp` endpoint with session-id
+  header; `/health` for docker healthcheck. Express dependency added.
+- **Compose deploy:** `docker-compose.yml` with HTTP transport on port
+  `${HOST_PORT:-3001}:3000`, env passthrough for `PLEX_URL`/`PLEX_TOKEN`,
+  healthcheck via wget.
 
 ## Next
 
-- Smoke-test against a real Plex server (set `PLEX_URL`/`PLEX_TOKEN`,
-  run `npm run dev`, exercise via an MCP client)
-- Build the Docker image and verify `docker run -i` connects via stdio
-- Wire into Claude Desktop config and verify the tools call through
-- After smoke test passes: decide on whether to add playback control
-  tools and library-management tools (currently out of scope)
+- Smoke-test the HTTP transport: `docker compose up --build` against a
+  real Plex server, hit `/mcp` with the MCP Inspector or curl, verify
+  the tool roundtrip.
+- Smoke-test stdio path still works post-refactor: `docker run -i --rm
+  -e PLEX_URL=... -e PLEX_TOKEN=... plex-mcp`.
+- Deploy to the Synology NAS via Portainer (Stack from Git URL pointing
+  at this repo); confirm container becomes healthy and is reachable on
+  the LAN.
+- Replicate the same diff to `servarr-mcp` and `downloader-mcp` once the
+  pilot is proven.
+- After deployment is solid: decide on playback control / library-mgmt
+  tools (still out of scope).
 
 ## Open Decisions
 
