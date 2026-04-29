@@ -19,9 +19,7 @@ if (!PLEX_URL || !PLEX_TOKEN) {
 const plex = new PlexClient({ url: PLEX_URL, token: PLEX_TOKEN });
 
 const asText = (data: unknown) => ({
-  content: [
-    { type: "text" as const, text: JSON.stringify(data, null, 2) },
-  ],
+  content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
 });
 
 function createServer(): McpServer {
