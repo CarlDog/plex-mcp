@@ -8,18 +8,106 @@ interface PlexResponse<T> {
 }
 
 export class PlexClient {
+  private machineIdentifier: string | undefined;
+
   constructor(private readonly config: PlexConfig) {}
+
+  /**
+   * Get this Plex server's machineIdentifier (cached after first call).
+   * Needed for constructing the `server://...` URIs that playlist
+   * mutation endpoints (`POST /playlists`, `PUT /playlists/{id}/items`)
+   * require.
+   */
+  async getMachineIdentifier(): Promise<string> {
+    if (this.machineIdentifier) return this.machineIdentifier;
+    const data = await this.request<{ machineIdentifier?: string }>(
+      "/identity",
+    );
+    const id = data.MediaContainer?.machineIdentifier;
+    if (!id) {
+      throw new Error("Plex /identity did not return machineIdentifier");
+    }
+    this.machineIdentifier = id;
+    return id;
+  }
+
+  /**
+   * Build a `server://...` URI for a metadata item, suitable for
+   * Plex's `uri=` query param (used by playlist create/add).
+   */
+  async metadataUri(ratingKey: string): Promise<string> {
+    const machineId = await this.getMachineIdentifier();
+    return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${ratingKey}`;
+  }
+
+  async listPlaylists(): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>("/playlists");
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
+  async getPlaylistItems(playlistId: string): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      `/playlists/${playlistId}/items`,
+    );
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
+  async createPlaylist(args: {
+    title: string;
+    type: "video" | "audio" | "photo";
+    ratingKey: string;
+  }): Promise<unknown> {
+    const uri = await this.metadataUri(args.ratingKey);
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      "/playlists",
+      {
+        title: args.title,
+        type: args.type,
+        smart: "0",
+        uri,
+      },
+      undefined,
+      "POST",
+    );
+    return data.MediaContainer?.Metadata?.[0];
+  }
+
+  async addToPlaylist(playlistId: string, ratingKey: string): Promise<void> {
+    const uri = await this.metadataUri(ratingKey);
+    await this.requestNoContent(
+      `/playlists/${playlistId}/items`,
+      { uri },
+      "PUT",
+    );
+  }
+
+  async removeFromPlaylist(
+    playlistId: string,
+    playlistItemId: string,
+  ): Promise<void> {
+    await this.requestNoContent(
+      `/playlists/${playlistId}/items/${playlistItemId}`,
+      {},
+      "DELETE",
+    );
+  }
+
+  async deletePlaylist(playlistId: string): Promise<void> {
+    await this.requestNoContent(`/playlists/${playlistId}`, {}, "DELETE");
+  }
 
   private async request<T>(
     path: string,
     params: Record<string, string> = {},
     headers: Record<string, string> = {},
+    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
   ): Promise<PlexResponse<T>> {
     const url = new URL(path, this.config.url);
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
     const res = await fetch(url, {
+      method,
       headers: {
         "X-Plex-Token": this.config.token,
         Accept: "application/json",
@@ -29,27 +117,38 @@ export class PlexClient {
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(
-        `Plex ${res.status} ${res.statusText} for ${path}: ${body.slice(0, 200)}`,
+        `Plex ${res.status} ${res.statusText} for ${method} ${path}: ${body.slice(0, 200)}`,
       );
     }
-    return (await res.json()) as PlexResponse<T>;
+    // Plex sometimes returns empty bodies even for non-GET. Guard
+    // against parse errors by reading text first and returning an
+    // empty PlexResponse if unparseable.
+    const text = await res.text();
+    if (!text) return {} as PlexResponse<T>;
+    try {
+      return JSON.parse(text) as PlexResponse<T>;
+    } catch {
+      return {} as PlexResponse<T>;
+    }
   }
 
   private async requestNoContent(
     path: string,
     params: Record<string, string> = {},
+    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
   ): Promise<void> {
     const url = new URL(path, this.config.url);
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
     const res = await fetch(url, {
+      method,
       headers: { "X-Plex-Token": this.config.token },
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(
-        `Plex ${res.status} ${res.statusText} for ${path}: ${body.slice(0, 200)}`,
+        `Plex ${res.status} ${res.statusText} for ${method} ${path}: ${body.slice(0, 200)}`,
       );
     }
   }

@@ -20,6 +20,12 @@ your Plex libraries.
 | `plex_history` | Playback history entries (paged, most recent first) |
 | `plex_mark_watched` | Mark an item as watched (reversible) |
 | `plex_mark_unwatched` | Mark an item as unwatched (reversible) |
+| `plex_list_playlists` | List all playlists (regular + smart) |
+| `plex_get_playlist_items` | List a playlist's contents |
+| `plex_create_playlist` | Create a regular playlist seeded with one item |
+| `plex_add_to_playlist` | Append an item to a regular playlist |
+| `plex_remove_from_playlist` | Remove an item by `playlistItemID` |
+| `plex_delete_playlist` | Delete a playlist (metadata only — media untouched) |
 
 ## Configuration
 
