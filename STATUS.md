@@ -4,8 +4,8 @@
 
 ## Phase
 
-Scaffolding — initial repo structure created, not yet built or tested
-end-to-end.
+Scaffolded — code builds, deps resolved, repo published, MCP tooling
+wired. Pending live smoke test against a real Plex server.
 
 ## Done
 
@@ -15,10 +15,18 @@ end-to-end.
 - Multi-stage Dockerfile (alpine, non-root user)
 - Security baseline: `.gitignore`, `.gitleaks.toml`, `.githooks/pre-commit`
 - Project docs: CLAUDE.md, STATUS.md, README.md
+- `npm install` + `tsc` clean. `@modelcontextprotocol/sdk` resolved to
+  v1.29.0; dist outputs verified. 0 vulnerabilities.
+- Public repo published at https://github.com/CarlDog/plex-mcp with a
+  no-PII commit author (CarlDog noreply).
+- Serena project activated; five memories written
+  (`project_overview`, `structure`, `suggested_commands`, `conventions`,
+  `task_completion`). `.serena/` committed.
+- OpenChronicle MCP server registered local-scope for this directory
+  (`claude mcp add openchronicle -- oc mcp serve`).
 
 ## Next
 
-- `npm install` and verify `npm run build` succeeds
 - Smoke-test against a real Plex server (set `PLEX_URL`/`PLEX_TOKEN`,
   run `npm run dev`, exercise via an MCP client)
 - Build the Docker image and verify `docker run -i` connects via stdio
