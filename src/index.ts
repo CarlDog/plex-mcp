@@ -25,7 +25,7 @@ const plex = new PlexClient({ url: PLEX_URL, token: PLEX_TOKEN });
 function createServer(): McpServer {
   const server = new McpServer({
     name: "plex-mcp",
-    version: "0.3.0",
+    version: "0.4.0",
   });
   registerTools(server, plex);
   return server;
