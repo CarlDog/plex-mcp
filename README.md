@@ -55,16 +55,26 @@ docker run -i --rm \
 
 ## Run with Docker Compose (HTTP, long-lived)
 
+The compose file pulls `ghcr.io/carldog/plex-mcp:latest` (multi-arch:
+linux/amd64 + linux/arm64), published by CI on every push to `main`.
+
 ```bash
 # Required env vars (or use a .env file):
 export PLEX_URL=http://192.168.1.50:32400
 export PLEX_TOKEN=your-token
 export HOST_PORT=3001  # optional, defaults to 3001
 
-docker compose up --build
+docker compose up
 ```
 
 The MCP endpoint will be at `http://<host>:${HOST_PORT}/mcp`.
+
+To rebuild from source instead of pulling:
+
+```bash
+docker build -t ghcr.io/carldog/plex-mcp:latest .
+docker compose up
+```
 
 ## Deploy via Portainer (Stack from Git)
 

@@ -1,8 +1,7 @@
 services:
   plex-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/carldog/plex-mcp:latest
+    pull_policy: always
     container_name: plex-mcp
     restart: unless-stopped
     ports:
