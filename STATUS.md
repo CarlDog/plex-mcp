@@ -4,10 +4,11 @@
 
 ## Phase
 
-HTTP transport added (pilot for the `*-mcp` family). Same image now
-supports stdio and Streamable HTTP, selected by the `MCP_PORT` env var.
-`docker-compose.yml` added for Portainer/Compose deployment. Pending
-live smoke test of HTTP path against a real Plex server.
+Deployed and verified — running on the NAS at
+`http://carldog-nas:3001/mcp`. HTTP transport pilot for the `*-mcp`
+family was proved end-to-end against a real Plex (14 libraries returned
+via `plex_list_libraries`), then replicated to servarr-mcp and
+downloader-mcp.
 
 ## Done
 
@@ -35,18 +36,11 @@ live smoke test of HTTP path against a real Plex server.
 
 ## Next
 
-- Smoke-test the HTTP transport: `docker compose up --build` against a
-  real Plex server, hit `/mcp` with the MCP Inspector or curl, verify
-  the tool roundtrip.
-- Smoke-test stdio path still works post-refactor: `docker run -i --rm
-  -e PLEX_URL=... -e PLEX_TOKEN=... plex-mcp`.
-- Deploy to the Synology NAS via Portainer (Stack from Git URL pointing
-  at this repo); confirm container becomes healthy and is reachable on
-  the LAN.
-- Replicate the same diff to `servarr-mcp` and `downloader-mcp` once the
-  pilot is proven.
-- After deployment is solid: decide on playback control / library-mgmt
-  tools (still out of scope).
+- Wire into Claude Desktop and verify tool calls flow through end-to-end
+  from the assistant (rather than via curl).
+- Decide on adding playback control / library-management tools (still
+  out of scope; current set is read-only browse + search).
+- Add tests once a real Plex test target is set up (don't mock).
 
 ## Open Decisions
 
@@ -65,9 +59,4 @@ None active. Decisions made during scaffolding:
 
 ## Known Gaps
 
-- No tests yet
-- No CI yet
-- No published Docker image yet (would publish to GHCR or Docker Hub
-  after smoke tests)
-- MCP SDK version pinned to `^1.0.0` — verify against latest release
-  on first `npm install`
+- No tests yet.
