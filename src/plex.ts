@@ -33,6 +33,25 @@ export class PlexClient {
     return (await res.json()) as PlexResponse<T>;
   }
 
+  private async requestNoContent(
+    path: string,
+    params: Record<string, string> = {},
+  ): Promise<void> {
+    const url = new URL(path, this.config.url);
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+    const res = await fetch(url, {
+      headers: { "X-Plex-Token": this.config.token },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(
+        `Plex ${res.status} ${res.statusText} for ${path}: ${body.slice(0, 200)}`,
+      );
+    }
+  }
+
   async listLibraries(): Promise<unknown[]> {
     const data = await this.request<{ Directory?: unknown[] }>(
       "/library/sections",
@@ -144,5 +163,19 @@ export class PlexClient {
       size: items.length,
       items,
     };
+  }
+
+  async markWatched(ratingKey: string): Promise<void> {
+    await this.requestNoContent("/:/scrobble", {
+      key: ratingKey,
+      identifier: "com.plexapp.plugins.library",
+    });
+  }
+
+  async markUnwatched(ratingKey: string): Promise<void> {
+    await this.requestNoContent("/:/unscrobble", {
+      key: ratingKey,
+      identifier: "com.plexapp.plugins.library",
+    });
   }
 }

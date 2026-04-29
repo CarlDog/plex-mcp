@@ -18,6 +18,8 @@ your Plex libraries.
 | `plex_get_children` | Children of an item (show→seasons, season→episodes, artist→albums) |
 | `plex_now_playing` | Currently-playing sessions on the server |
 | `plex_history` | Playback history entries (paged, most recent first) |
+| `plex_mark_watched` | Mark an item as watched (reversible) |
+| `plex_mark_unwatched` | Mark an item as unwatched (reversible) |
 
 ## Configuration
 
