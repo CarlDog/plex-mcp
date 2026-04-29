@@ -26,6 +26,10 @@ what's next.
 - `src/plex.ts` — Plex HTTP API client.
 - `Dockerfile` — multi-stage build for the runtime image.
 - `docker-compose.yml` — Compose/Portainer deployment using HTTP transport.
+- `docs/PLEX-API.md` — curated reference for the Plex HTTP API: external
+  doc links, gotchas we've hit (pagination pairing, `/:/scrobble` empty
+  responses, `type` integer codes), and rough endpoint shapes for
+  capabilities we haven't built yet. Read this before adding new tools.
 - `.githooks/pre-commit` — gitleaks + PII pattern scan.
 - `.gitleaks.toml` — secret-scanning config.
 
