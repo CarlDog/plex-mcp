@@ -3,7 +3,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText } from "./helpers.js";
+import { asText, withLogging } from "./helpers.js";
 
 export function registerSessionsTools(
   server: McpServer,
@@ -17,7 +17,9 @@ export function registerSessionsTools(
         "Get currently-playing sessions on the Plex server. Each session includes the item being played, the user, player device, and transcoding info.",
       inputSchema: {},
     },
-    async () => asText(await plex.nowPlaying()),
+    withLogging("plex_now_playing", async () =>
+      asText(await plex.nowPlaying()),
+    ),
   );
 
   server.registerTool(
@@ -46,7 +48,8 @@ export function registerSessionsTools(
           .describe("Optional library section ID to filter to"),
       },
     },
-    async ({ offset, limit, section_id }) =>
+    withLogging("plex_history", async ({ offset, limit, section_id }) =>
       asText(await plex.history({ offset, limit, sectionId: section_id })),
+    ),
   );
 }

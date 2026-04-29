@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
+import { log } from "./log.js";
 import { PlexClient } from "./plex.js";
 import { registerTools } from "./tools/index.js";
 
@@ -12,7 +13,10 @@ const PLEX_URL = process.env.PLEX_URL;
 const PLEX_TOKEN = process.env.PLEX_TOKEN;
 
 if (!PLEX_URL || !PLEX_TOKEN) {
-  console.error("PLEX_URL and PLEX_TOKEN environment variables are required");
+  log.error(
+    "startup",
+    "PLEX_URL and PLEX_TOKEN environment variables are required",
+  );
   process.exit(1);
 }
 
@@ -30,7 +34,7 @@ function createServer(): McpServer {
 const portStr = process.env.MCP_PORT;
 const port = portStr ? Number.parseInt(portStr, 10) : null;
 if (portStr && (port === null || Number.isNaN(port))) {
-  console.error(`Invalid MCP_PORT: ${portStr}`);
+  log.error("startup", "Invalid MCP_PORT", { value: portStr });
   process.exit(1);
 }
 
@@ -81,7 +85,9 @@ if (port) {
 
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
-      console.error("MCP request error:", err);
+      log.error("transport", "MCP request error", {
+        msg: (err as Error).message,
+      });
       if (!res.headersSent) {
         res.status(500).json({ error: "Internal server error" });
       }
@@ -93,7 +99,7 @@ if (port) {
   });
 
   app.listen(port, () => {
-    console.error(`plex-mcp HTTP transport listening on :${port}`);
+    log.info("server", "listening", { transport: "http", port });
   });
 } else {
   // Default: stdio transport (for direct invocation by MCP clients via `docker run -i`).
