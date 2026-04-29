@@ -99,6 +99,21 @@ function createServer(): McpServer {
   );
 
   server.registerTool(
+    "plex_get_children",
+    {
+      title: "Get Plex Item Children",
+      description:
+        "Get child items of a parent: show → seasons, season → episodes, artist → albums, album → tracks. Use plex_get_item or plex_search to find the parent's rating_key first.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the parent item"),
+      },
+    },
+    async ({ rating_key }) => asText(await plex.getChildren(rating_key)),
+  );
+
+  server.registerTool(
     "plex_browse",
     {
       title: "Browse Plex Library",

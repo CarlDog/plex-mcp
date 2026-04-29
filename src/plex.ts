@@ -69,6 +69,13 @@ export class PlexClient {
     return data.MediaContainer?.Metadata?.[0];
   }
 
+  async getChildren(ratingKey: string): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      `/library/metadata/${ratingKey}/children`,
+    );
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
   async browse(
     sectionId: string,
     options: { offset?: number; limit?: number; type?: number } = {},
