@@ -151,13 +151,7 @@ function createServer(): McpServer {
       },
     },
     async ({ offset, limit, section_id }) =>
-      asText(
-        await plex.history({
-          offset,
-          limit: limit ?? 50,
-          sectionId: section_id,
-        }),
-      ),
+      asText(await plex.history({ offset, limit, sectionId: section_id })),
   );
 
   server.registerTool(
@@ -201,7 +195,7 @@ function createServer(): McpServer {
       asText(
         await plex.browse(section_id, {
           offset,
-          limit: limit ?? 50,
+          limit,
           type: type ? PLEX_TYPE_CODES[type] : undefined,
         }),
       ),
