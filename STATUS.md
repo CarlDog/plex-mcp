@@ -38,11 +38,18 @@ downloader-mcp.
   the test workflow.
 - **Lint/format tooling:** ESLint + Prettier configured; VS Code
   workspace settings committed for consistent editor behavior.
+- **Same-host Plex reachability fix:** `extra_hosts:
+  ["host.docker.internal:host-gateway"]` added to
+  `docker-compose.yml`; recommended `PLEX_URL=http://host.docker.internal:32400`
+  documented in README. A container can't resolve the host machine's
+  own hostname, so the previous `PLEX_URL=http://carldog-nas:32400`
+  failed at fetch time inside the container.
+- **Wired into Claude Desktop** via `mcp-remote` bridge
+  (`npx -y mcp-remote http://carldog-nas:3001/mcp --allow-http`).
+  End-to-end verified through the assistant: 14 libraries returned.
 
 ## Next
 
-- Wire into Claude Desktop and verify tool calls flow through end-to-end
-  from the assistant (rather than via curl).
 - Decide on adding playback control / library-management tools (still
   out of scope; current set is read-only browse + search).
 - Add tests once a real Plex test target is set up (don't mock).
