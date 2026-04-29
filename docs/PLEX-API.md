@@ -116,6 +116,12 @@ by default.
 | `plex_history`        | `GET /status/sessions/history/all`                                     | Paged; `sort=viewedAt:desc`; optional `librarySectionID`               |
 | `plex_mark_watched`   | `GET /:/scrobble?key=...&identifier=com.plexapp.plugins.library`       | Empty 200 — use `requestNoContent`                                     |
 | `plex_mark_unwatched` | `GET /:/unscrobble?key=...&identifier=com.plexapp.plugins.library`     | Empty 200                                                              |
+| `plex_list_playlists` | `GET /playlists`                                                       | Includes both regular and smart playlists                              |
+| `plex_get_playlist_items` | `GET /playlists/{id}/items`                                        | Each item has `playlistItemID` (≠ `ratingKey`)                         |
+| `plex_create_playlist` | `POST /playlists?type=&title=&smart=0&uri=server://...`               | Requires at least one initial item via `uri=`                          |
+| `plex_add_to_playlist` | `PUT /playlists/{id}/items?uri=server://...`                          | `uri=` uses `metadataUri()` helper for shape                           |
+| `plex_remove_from_playlist` | `DELETE /playlists/{id}/items/{playlistItemID}`                  | Path uses `playlistItemID`, not `ratingKey`                            |
+| `plex_delete_playlist` | `DELETE /playlists/{id}`                                              | Metadata only; media files untouched                                   |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.
@@ -128,12 +134,7 @@ against plexapi.dev / python-plexapi before relying on the shape.
 
 | Capability                              | Endpoint(s)                                                                              | Risk class               |
 | --------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ |
-| List playlists                          | `GET /playlists`                                                                         | Low                      |
-| Get playlist contents                   | `GET /playlists/{id}/items`                                                              | Low                      |
-| Create playlist                         | `POST /playlists?type=video&title=...&uri=...`                                           | Low                      |
-| Add to playlist                         | `PUT /playlists/{id}/items?uri=...`                                                      | Low                      |
-| Remove from playlist                    | `DELETE /playlists/{id}/items/{playlistItemID}`                                          | Low                      |
-| Delete playlist                         | `DELETE /playlists/{id}`                                                                 | Low (just metadata)      |
+| Smart playlists (filter expressions)    | `POST /playlists?type=&smart=1&uri=` (filter shape via `library:///` URI)                | Medium (complex shape)   |
 | Plex hubs (Continue Watching, etc.)     | `GET /hubs`, `GET /hubs/sections/{id}`                                                   | Low                      |
 | Rate item                               | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` (0–10 → 0–5 stars) | Low                      |
 | Edit metadata field                     | `PUT /library/metadata/{key}?<field>.value=...`                                          | Medium (LLM might mangle) |
