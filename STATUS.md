@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-04-28
+**Last updated:** 2026-04-29
 
 ## Phase
 
@@ -33,6 +33,11 @@ downloader-mcp.
 - **Compose deploy:** `docker-compose.yml` with HTTP transport on port
   `${HOST_PORT:-3001}:3000`, env passthrough for `PLEX_URL`/`PLEX_TOKEN`,
   healthcheck via wget.
+- **CI:** GitHub Actions workflows — GHCR multi-arch image publish and
+  a multi-OS test matrix; `lint` and `format:check` enforced as part of
+  the test workflow.
+- **Lint/format tooling:** ESLint + Prettier configured; VS Code
+  workspace settings committed for consistent editor behavior.
 
 ## Next
 
