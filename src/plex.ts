@@ -13,6 +13,7 @@ export class PlexClient {
   private async request<T>(
     path: string,
     params: Record<string, string> = {},
+    headers: Record<string, string> = {},
   ): Promise<PlexResponse<T>> {
     const url = new URL(path, this.config.url);
     for (const [k, v] of Object.entries(params)) {
@@ -22,6 +23,7 @@ export class PlexClient {
       headers: {
         "X-Plex-Token": this.config.token,
         Accept: "application/json",
+        ...headers,
       },
     });
     if (!res.ok) {
@@ -110,24 +112,26 @@ export class PlexClient {
     size: number;
     items: unknown[];
   }> {
+    // Plex needs BOTH X-Plex-Container-Start and X-Plex-Container-Size
+    // present — sending only Size is silently ignored. Always send both.
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 50;
     const params: Record<string, string> = { sort: "viewedAt:desc" };
-    if (options.offset !== undefined) {
-      params["X-Plex-Container-Start"] = String(options.offset);
-    }
-    if (options.limit !== undefined) {
-      params["X-Plex-Container-Size"] = String(options.limit);
-    }
+    const headers: Record<string, string> = {
+      "X-Plex-Container-Start": String(offset),
+      "X-Plex-Container-Size": String(limit),
+    };
     if (options.sectionId !== undefined) {
       params.librarySectionID = options.sectionId;
     }
     const data = await this.request<{
       Metadata?: unknown[];
       totalSize?: number;
-    }>("/status/sessions/history/all", params);
+    }>("/status/sessions/history/all", params, headers);
     const items = data.MediaContainer?.Metadata ?? [];
     return {
       total: data.MediaContainer?.totalSize ?? items.length,
-      offset: options.offset ?? 0,
+      offset,
       size: items.length,
       items,
     };
@@ -142,24 +146,26 @@ export class PlexClient {
     size: number;
     items: unknown[];
   }> {
+    // Plex needs BOTH X-Plex-Container-Start and X-Plex-Container-Size
+    // present — sending only Size is silently ignored. Always send both.
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 50;
     const params: Record<string, string> = {};
-    if (options.offset !== undefined) {
-      params["X-Plex-Container-Start"] = String(options.offset);
-    }
-    if (options.limit !== undefined) {
-      params["X-Plex-Container-Size"] = String(options.limit);
-    }
+    const headers: Record<string, string> = {
+      "X-Plex-Container-Start": String(offset),
+      "X-Plex-Container-Size": String(limit),
+    };
     if (options.type !== undefined) {
       params.type = String(options.type);
     }
     const data = await this.request<{
       Metadata?: unknown[];
       totalSize?: number;
-    }>(`/library/sections/${sectionId}/all`, params);
+    }>(`/library/sections/${sectionId}/all`, params, headers);
     const items = data.MediaContainer?.Metadata ?? [];
     return {
       total: data.MediaContainer?.totalSize ?? items.length,
-      offset: options.offset ?? 0,
+      offset,
       size: items.length,
       items,
     };
