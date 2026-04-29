@@ -33,6 +33,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        # Integration tests require PLEX_URL/PLEX_TOKEN. Without them
+        # (the default in CI), the integration suite is skipped via
+        # describe.skipIf in tests/plex.test.ts. The vitest run still
+        # validates that the test infra wires up correctly.
+        run: npm test
+
   quality:
     name: lint + format
     runs-on: ubuntu-latest
