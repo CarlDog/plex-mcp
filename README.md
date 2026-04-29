@@ -14,6 +14,7 @@ your Plex libraries.
 | `plex_recently_added` | Recently added items, optionally per-section |
 | `plex_on_deck` | Items "on deck" (partially watched / next up) |
 | `plex_get_item` | Full metadata for one item by rating key |
+| `plex_browse` | List items in a library section (paged, optional type filter) |
 
 ## Configuration
 
