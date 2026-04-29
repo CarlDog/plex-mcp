@@ -82,16 +82,30 @@ downloader-mcp.
   standalone `getMachineIdentifier` / `metadataUri` checks.
   PlexClient gained HTTP-method support on `request` /
   `requestNoContent` to handle POST/PUT/DELETE.
+- **v0.4 shipped: 4 new curated-discovery tools (17 → 21 total).**
+  `plex_hubs`, `plex_section_hubs`, `plex_related`, `plex_similar`.
+  Update-timeline tool deliberately scoped out (low value vs. the
+  scrobble surface we already have).
+- **Structured logging (v0.4).** `src/log.ts` writes to stderr in
+  the format `<ts> <LEVEL> [<scope>] <msg> key=value...`, gated by
+  `LOG_LEVEL` (default `info`). Tool layer logs invoke/ok/error
+  with timing via a `withLogging` wrapper around every handler.
+  PlexClient layer logs every HTTP request with method/path/status/ms
+  at debug level (warn on 4xx, error on 5xx/network). Docker
+  `logging:` block in compose caps log size at ~30MB with automatic
+  rotation.
 
 ## Next
 
-- **v0.4 — Curated discovery + watch state extensions.** Plex hubs
-  (`/hubs`, `/hubs/sections/{id}`), related/similar
-  (`/library/metadata/{key}/related`, `/similar`), update timeline
-  (`/:/timeline`). Smaller batch; can be bundled.
-- **CI Plex secrets** — wire `PLEX_URL`/`PLEX_TOKEN` into GHA
-  secrets so the integration suite actually runs on CI rather than
-  always skipping. Requires a CI-reachable Plex.
+- **v0.5 scope to plan.** Possible candidates: smart-playlist support
+  (filter expressions), per-tool args redaction policy if any future
+  tool takes free-text content, `/transcode/sessions` for visibility
+  into active transcoding, server admin ops (refresh, scan).
+- **CI integration tests are skipped by default.** Personal repo;
+  if anyone wants CI to actually exercise the suite, they wire up
+  their own Plex endpoint as GHA secrets. Decided not to do this
+  for the canonical repo — the dev's local pre-commit run is the
+  test gate.
 
 ## Open Decisions
 
@@ -113,5 +127,8 @@ None active. Decisions made during scaffolding:
 - CI runs the test suite without `PLEX_URL`/`PLEX_TOKEN` (no GHA
   secrets configured), so the integration tests skip on every CI run.
   Tests must be exercised locally by the developer with `.env`
-  loaded. Adding GHA secrets + a CI-reachable Plex would unblock
-  full CI coverage.
+  loaded. **Decided to leave this as-is** for the canonical repo —
+  it's a personal project and a CI-reachable Plex would mean either
+  a public-facing Plex (token-on-the-internet risk) or a
+  self-hosted runner (separate setup task). Forks of this repo can
+  wire up their own CI as they see fit.

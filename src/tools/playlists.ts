@@ -9,7 +9,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText } from "./helpers.js";
+import { asText, withLogging } from "./helpers.js";
 
 export function registerPlaylistsTools(
   server: McpServer,
@@ -23,7 +23,9 @@ export function registerPlaylistsTools(
         "List all playlists on the Plex server. Each entry includes a `smart` field; smart playlists are filter-based and auto-updating, regular playlists are explicit lists. The mutation tools (add/remove/delete) only support regular playlists.",
       inputSchema: {},
     },
-    async () => asText(await plex.listPlaylists()),
+    withLogging("plex_list_playlists", async () =>
+      asText(await plex.listPlaylists()),
+    ),
   );
 
   server.registerTool(
@@ -36,7 +38,9 @@ export function registerPlaylistsTools(
         playlist_id: z.string().describe("Playlist ratingKey"),
       },
     },
-    async ({ playlist_id }) => asText(await plex.getPlaylistItems(playlist_id)),
+    withLogging("plex_get_playlist_items", async ({ playlist_id }) =>
+      asText(await plex.getPlaylistItems(playlist_id)),
+    ),
   );
 
   server.registerTool(
@@ -55,7 +59,7 @@ export function registerPlaylistsTools(
           .describe("ratingKey of the seed item (must match `type`)"),
       },
     },
-    async ({ title, type, rating_key }) =>
+    withLogging("plex_create_playlist", async ({ title, type, rating_key }) =>
       asText(
         await plex.createPlaylist({
           title,
@@ -63,6 +67,7 @@ export function registerPlaylistsTools(
           ratingKey: rating_key,
         }),
       ),
+    ),
   );
 
   server.registerTool(
@@ -76,10 +81,10 @@ export function registerPlaylistsTools(
         rating_key: z.string().describe("ratingKey of the item to append"),
       },
     },
-    async ({ playlist_id, rating_key }) => {
+    withLogging("plex_add_to_playlist", async ({ playlist_id, rating_key }) => {
       await plex.addToPlaylist(playlist_id, rating_key);
       return asText({ added: rating_key, playlist_id });
-    },
+    }),
   );
 
   server.registerTool(
@@ -97,13 +102,16 @@ export function registerPlaylistsTools(
           ),
       },
     },
-    async ({ playlist_id, playlist_item_id }) => {
-      await plex.removeFromPlaylist(playlist_id, playlist_item_id);
-      return asText({
-        removed: playlist_item_id,
-        playlist_id,
-      });
-    },
+    withLogging(
+      "plex_remove_from_playlist",
+      async ({ playlist_id, playlist_item_id }) => {
+        await plex.removeFromPlaylist(playlist_id, playlist_item_id);
+        return asText({
+          removed: playlist_item_id,
+          playlist_id,
+        });
+      },
+    ),
   );
 
   server.registerTool(
@@ -116,9 +124,9 @@ export function registerPlaylistsTools(
         playlist_id: z.string().describe("Playlist ratingKey to delete"),
       },
     },
-    async ({ playlist_id }) => {
+    withLogging("plex_delete_playlist", async ({ playlist_id }) => {
       await plex.deletePlaylist(playlist_id);
       return asText({ deleted: playlist_id });
-    },
+    }),
   );
 }
