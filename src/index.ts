@@ -125,6 +125,42 @@ function createServer(): McpServer {
   );
 
   server.registerTool(
+    "plex_history",
+    {
+      title: "Plex Watch History",
+      description:
+        "List playback history entries, sorted most recent first. Paged like plex_browse. Optionally filter to a single library section.",
+      inputSchema: {
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Pagination offset (default 0)"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe("Page size, max 200 (default 50)"),
+        section_id: z
+          .string()
+          .optional()
+          .describe("Optional library section ID to filter to"),
+      },
+    },
+    async ({ offset, limit, section_id }) =>
+      asText(
+        await plex.history({
+          offset,
+          limit: limit ?? 50,
+          sectionId: section_id,
+        }),
+      ),
+  );
+
+  server.registerTool(
     "plex_browse",
     {
       title: "Browse Plex Library",

@@ -83,6 +83,37 @@ export class PlexClient {
     return data.MediaContainer?.Metadata ?? [];
   }
 
+  async history(
+    options: { offset?: number; limit?: number; sectionId?: string } = {},
+  ): Promise<{
+    total: number;
+    offset: number;
+    size: number;
+    items: unknown[];
+  }> {
+    const params: Record<string, string> = { sort: "viewedAt:desc" };
+    if (options.offset !== undefined) {
+      params["X-Plex-Container-Start"] = String(options.offset);
+    }
+    if (options.limit !== undefined) {
+      params["X-Plex-Container-Size"] = String(options.limit);
+    }
+    if (options.sectionId !== undefined) {
+      params.librarySectionID = options.sectionId;
+    }
+    const data = await this.request<{
+      Metadata?: unknown[];
+      totalSize?: number;
+    }>("/status/sessions/history/all", params);
+    const items = data.MediaContainer?.Metadata ?? [];
+    return {
+      total: data.MediaContainer?.totalSize ?? items.length,
+      offset: options.offset ?? 0,
+      size: items.length,
+      items,
+    };
+  }
+
   async browse(
     sectionId: string,
     options: { offset?: number; limit?: number; type?: number } = {},
