@@ -59,12 +59,23 @@ downloader-mcp.
 - **Repo line-ending hygiene:** added `.gitattributes` enforcing LF,
   so prettier `endOfLine: "lf"` doesn't fail on Windows working trees
   with autocrlf.
+- **Automated test suite (v0.2.5).** vitest + 13 integration tests
+  against a live Plex (one per `PlexClient` method, plus regression
+  tests for the `X-Plex-Container-Start/Size` pairing bug and a
+  round-trip on `mark_watched`/`mark_unwatched`). Fixtures discovered
+  dynamically at bootstrap so the suite survives a Plex DB rebuild.
+  Env-gated: skipped when `PLEX_URL`/`PLEX_TOKEN` aren't set, so CI
+  passes without secrets. Wired into the existing test workflow.
 
 ## Next
 
-- Add tests once a real Plex test target is set up (don't mock).
-- v0.3 scope to plan: playlists (list/CRUD), Plex hubs (Continue
-  Watching / Top Picks), maybe ratings + edit-metadata.
+- **v0.3 — Playlists.** Full CRUD: list, get contents, create, add,
+  remove, delete (5–6 tools). Likely triggers the `src/tools/`
+  refactor per CLAUDE.md's threshold.
+- **v0.4 — Curated discovery + watch state extensions.** Plex hubs
+  (`/hubs`, `/hubs/sections/{id}`), related/similar
+  (`/library/metadata/{key}/related`, `/similar`), update timeline
+  (`/:/timeline`). Smaller batch; can be bundled.
 
 ## Open Decisions
 
@@ -83,4 +94,8 @@ None active. Decisions made during scaffolding:
 
 ## Known Gaps
 
-- No tests yet.
+- CI runs the test suite without `PLEX_URL`/`PLEX_TOKEN` (no GHA
+  secrets configured), so the integration tests skip on every CI run.
+  Tests must be exercised locally by the developer with `.env`
+  loaded. Adding GHA secrets + a CI-reachable Plex would unblock
+  full CI coverage.
