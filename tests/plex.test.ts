@@ -114,6 +114,24 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     expect(Array.isArray(sessions)).toBe(true);
   });
 
+  it("listPlaylists returns an array", async () => {
+    const playlists = await client.listPlaylists();
+    expect(Array.isArray(playlists)).toBe(true);
+  });
+
+  it("getMachineIdentifier returns a non-empty string", async () => {
+    const id = await client.getMachineIdentifier();
+    expect(typeof id).toBe("string");
+    expect(id.length).toBeGreaterThan(0);
+  });
+
+  it("metadataUri builds a server:// URI containing the rating key", async () => {
+    const uri = await client.metadataUri("12345");
+    expect(uri).toMatch(
+      /^server:\/\/[^/]+\/com\.plexapp\.plugins\.library\/library\/metadata\/12345$/,
+    );
+  });
+
   describe("browse — pagination", () => {
     // Regression test for the X-Plex-Container-Start/Size pairing
     // bug we hit during v0.2: Plex silently ignores Size unless

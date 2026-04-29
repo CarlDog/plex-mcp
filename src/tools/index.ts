@@ -6,10 +6,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { PlexClient } from "../plex.js";
 import { registerDiscoveryTools } from "./discovery.js";
 import { registerPlaybackTools } from "./playback.js";
+import { registerPlaylistsTools } from "./playlists.js";
 import { registerSessionsTools } from "./sessions.js";
 
 export function registerTools(server: McpServer, plex: PlexClient): void {
   registerDiscoveryTools(server, plex);
   registerSessionsTools(server, plex);
   registerPlaybackTools(server, plex);
+  registerPlaylistsTools(server, plex);
 }
