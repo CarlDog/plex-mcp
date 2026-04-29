@@ -1,3 +1,5 @@
+import { log } from "./log.js";
+
 export interface PlexConfig {
   url: string;
   token: string;
@@ -106,20 +108,41 @@ export class PlexClient {
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
-    const res = await fetch(url, {
-      method,
-      headers: {
-        "X-Plex-Token": this.config.token,
-        Accept: "application/json",
-        ...headers,
-      },
-    });
+    const start = Date.now();
+    log.debug("plex", "request", { method, path });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: {
+          "X-Plex-Token": this.config.token,
+          Accept: "application/json",
+          ...headers,
+        },
+      });
+    } catch (err) {
+      log.error("plex", "network error", {
+        method,
+        path,
+        ms: Date.now() - start,
+        msg: (err as Error).message,
+      });
+      throw err;
+    }
+    const ms = Date.now() - start;
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      log.warn("plex", "http error", {
+        method,
+        path,
+        status: res.status,
+        ms,
+      });
       throw new Error(
         `Plex ${res.status} ${res.statusText} for ${method} ${path}: ${body.slice(0, 200)}`,
       );
     }
+    log.debug("plex", "ok", { method, path, status: res.status, ms });
     // Plex sometimes returns empty bodies even for non-GET. Guard
     // against parse errors by reading text first and returning an
     // empty PlexResponse if unparseable.
@@ -141,16 +164,37 @@ export class PlexClient {
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
-    const res = await fetch(url, {
-      method,
-      headers: { "X-Plex-Token": this.config.token },
-    });
+    const start = Date.now();
+    log.debug("plex", "request", { method, path });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: { "X-Plex-Token": this.config.token },
+      });
+    } catch (err) {
+      log.error("plex", "network error", {
+        method,
+        path,
+        ms: Date.now() - start,
+        msg: (err as Error).message,
+      });
+      throw err;
+    }
+    const ms = Date.now() - start;
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      log.warn("plex", "http error", {
+        method,
+        path,
+        status: res.status,
+        ms,
+      });
       throw new Error(
         `Plex ${res.status} ${res.statusText} for ${method} ${path}: ${body.slice(0, 200)}`,
       );
     }
+    log.debug("plex", "ok", { method, path, status: res.status, ms });
   }
 
   async listLibraries(): Promise<unknown[]> {

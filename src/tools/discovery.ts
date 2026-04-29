@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText } from "./helpers.js";
+import { asText, withLogging } from "./helpers.js";
 
 const PLEX_TYPE_CODES: Record<string, number> = {
   movie: 1,
@@ -28,7 +28,9 @@ export function registerDiscoveryTools(
       description: "List all libraries (sections) on the Plex server.",
       inputSchema: {},
     },
-    async () => asText(await plex.listLibraries()),
+    withLogging("plex_list_libraries", async () =>
+      asText(await plex.listLibraries()),
+    ),
   );
 
   server.registerTool(
@@ -39,7 +41,9 @@ export function registerDiscoveryTools(
         "Search across all Plex libraries for movies, shows, episodes, music, etc.",
       inputSchema: { query: z.string().describe("Search query") },
     },
-    async ({ query }) => asText(await plex.search(query)),
+    withLogging("plex_search", async ({ query }) =>
+      asText(await plex.search(query)),
+    ),
   );
 
   server.registerTool(
@@ -55,7 +59,9 @@ export function registerDiscoveryTools(
           .describe("Optional library section ID to filter to"),
       },
     },
-    async ({ section_id }) => asText(await plex.recentlyAdded(section_id)),
+    withLogging("plex_recently_added", async ({ section_id }) =>
+      asText(await plex.recentlyAdded(section_id)),
+    ),
   );
 
   server.registerTool(
@@ -66,7 +72,7 @@ export function registerDiscoveryTools(
         'Get items "on deck" — partially watched or next-up content.',
       inputSchema: {},
     },
-    async () => asText(await plex.onDeck()),
+    withLogging("plex_on_deck", async () => asText(await plex.onDeck())),
   );
 
   server.registerTool(
@@ -78,7 +84,9 @@ export function registerDiscoveryTools(
         rating_key: z.string().describe("The Plex rating key (item ID)"),
       },
     },
-    async ({ rating_key }) => asText(await plex.getItem(rating_key)),
+    withLogging("plex_get_item", async ({ rating_key }) =>
+      asText(await plex.getItem(rating_key)),
+    ),
   );
 
   server.registerTool(
@@ -93,7 +101,9 @@ export function registerDiscoveryTools(
           .describe("The Plex rating key of the parent item"),
       },
     },
-    async ({ rating_key }) => asText(await plex.getChildren(rating_key)),
+    withLogging("plex_get_children", async ({ rating_key }) =>
+      asText(await plex.getChildren(rating_key)),
+    ),
   );
 
   server.registerTool(
@@ -133,7 +143,7 @@ export function registerDiscoveryTools(
           .describe("Filter to a specific item type"),
       },
     },
-    async ({ section_id, offset, limit, type }) =>
+    withLogging("plex_browse", async ({ section_id, offset, limit, type }) =>
       asText(
         await plex.browse(section_id, {
           offset,
@@ -141,5 +151,6 @@ export function registerDiscoveryTools(
           type: type ? PLEX_TYPE_CODES[type] : undefined,
         }),
       ),
+    ),
   );
 }
