@@ -207,6 +207,42 @@ function createServer(): McpServer {
       ),
   );
 
+  server.registerTool(
+    "plex_mark_watched",
+    {
+      title: "Mark Plex Item Watched",
+      description:
+        "Mark a Plex item as watched (mutates server state). Reversible via plex_mark_unwatched.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the item to mark watched"),
+      },
+    },
+    async ({ rating_key }) => {
+      await plex.markWatched(rating_key);
+      return asText({ marked: "watched", rating_key });
+    },
+  );
+
+  server.registerTool(
+    "plex_mark_unwatched",
+    {
+      title: "Mark Plex Item Unwatched",
+      description:
+        "Mark a Plex item as unwatched (mutates server state). Reversible via plex_mark_watched.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the item to mark unwatched"),
+      },
+    },
+    async ({ rating_key }) => {
+      await plex.markUnwatched(rating_key);
+      return asText({ marked: "unwatched", rating_key });
+    },
+  );
+
   return server;
 }
 
