@@ -8,7 +8,42 @@ interface PlexResponse<T> {
 }
 
 export class PlexClient {
+  private machineIdentifier: string | undefined;
+
   constructor(private readonly config: PlexConfig) {}
+
+  /**
+   * Get this Plex server's machineIdentifier (cached after first call).
+   * Needed for constructing the `server://...` URIs that playlist
+   * mutation endpoints (`POST /playlists`, `PUT /playlists/{id}/items`)
+   * require.
+   */
+  async getMachineIdentifier(): Promise<string> {
+    if (this.machineIdentifier) return this.machineIdentifier;
+    const data = await this.request<{ machineIdentifier?: string }>(
+      "/identity",
+    );
+    const id = data.MediaContainer?.machineIdentifier;
+    if (!id) {
+      throw new Error("Plex /identity did not return machineIdentifier");
+    }
+    this.machineIdentifier = id;
+    return id;
+  }
+
+  /**
+   * Build a `server://...` URI for a metadata item, suitable for
+   * Plex's `uri=` query param (used by playlist create/add).
+   */
+  async metadataUri(ratingKey: string): Promise<string> {
+    const machineId = await this.getMachineIdentifier();
+    return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${ratingKey}`;
+  }
+
+  async listPlaylists(): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>("/playlists");
+    return data.MediaContainer?.Metadata ?? [];
+  }
 
   private async request<T>(
     path: string,
