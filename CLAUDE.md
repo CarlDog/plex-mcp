@@ -108,9 +108,28 @@ docker compose up --build
 
 ## Testing
 
-No tests yet. When added, integration tests against a real Plex server
-behind an env-gated test (don't mock the Plex API — see working-style
-note about mocked-vs-real divergence).
+Integration tests against a real Plex server live in `tests/`. They
+hit the live API rather than mocking it (per working-style:
+mocked-vs-real divergence is the bigger risk). The suite is gated on
+`PLEX_URL` / `PLEX_TOKEN` env vars — without them the tests are
+skipped, so CI without secrets passes cleanly.
+
+Fixtures (which library section, which show, which item to round-trip
+mark_watched on) are *discovered* at test bootstrap rather than
+hardcoded, so the suite survives a Plex DB rebuild.
+
+Run locally:
+
+```bash
+set -a; . .env; set +a            # load PLEX_URL / PLEX_TOKEN
+npm test                           # one-shot
+npm run test:watch                 # interactive
+```
+
+The mark_watched/unwatched round-trip mutates the user's most recent
+watch — bumping its `lastViewedAt` to "now" because Plex's
+`/:/scrobble` doesn't preserve the original. See
+[docs/PLEX-API.md](docs/PLEX-API.md) for the full gotcha.
 
 ## MCP tooling (local workstation)
 
