@@ -197,6 +197,41 @@ export class PlexClient {
     log.debug("plex", "ok", { method, path, status: res.status, ms });
   }
 
+  async hubs(): Promise<unknown[]> {
+    const data = await this.request<{ Hub?: unknown[] }>("/hubs");
+    return data.MediaContainer?.Hub ?? [];
+  }
+
+  async sectionHubs(sectionId: string): Promise<unknown[]> {
+    const data = await this.request<{ Hub?: unknown[] }>(
+      `/hubs/sections/${sectionId}`,
+    );
+    return data.MediaContainer?.Hub ?? [];
+  }
+
+  /**
+   * Plex's "related" hubs for a single item — typically grouped by
+   * provenance ("More with this director", "From this collection").
+   * The response shape is a list of hubs, each containing items.
+   */
+  async related(ratingKey: string): Promise<unknown[]> {
+    const data = await this.request<{ Hub?: unknown[] }>(
+      `/library/metadata/${ratingKey}/related`,
+    );
+    return data.MediaContainer?.Hub ?? [];
+  }
+
+  /**
+   * Plex's algorithmic "similar" items for a single item. Flat list,
+   * not hub-grouped.
+   */
+  async similar(ratingKey: string): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      `/library/metadata/${ratingKey}/similar`,
+    );
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
   async listLibraries(): Promise<unknown[]> {
     const data = await this.request<{ Directory?: unknown[] }>(
       "/library/sections",

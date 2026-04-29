@@ -153,4 +153,34 @@ export function registerDiscoveryTools(
       ),
     ),
   );
+
+  server.registerTool(
+    "plex_related",
+    {
+      title: "Plex Related Items",
+      description:
+        "Plex's curated 'related' content for a single item — typically grouped by provenance (More from this director, From this collection, etc.). Returns a list of hubs, each with its own items. Use plex_similar for an algorithmic similarity-based flat list.",
+      inputSchema: {
+        rating_key: z.string().describe("The Plex rating key of the item"),
+      },
+    },
+    withLogging("plex_related", async ({ rating_key }) =>
+      asText(await plex.related(rating_key)),
+    ),
+  );
+
+  server.registerTool(
+    "plex_similar",
+    {
+      title: "Plex Similar Items",
+      description:
+        "Plex's algorithmic 'similar items' list for a single item. Flat list (not hub-grouped). Different from plex_related, which groups by provenance.",
+      inputSchema: {
+        rating_key: z.string().describe("The Plex rating key of the item"),
+      },
+    },
+    withLogging("plex_similar", async ({ rating_key }) =>
+      asText(await plex.similar(rating_key)),
+    ),
+  );
 }

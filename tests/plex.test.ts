@@ -132,6 +132,26 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     );
   });
 
+  it("hubs returns an array", async () => {
+    const hubs = await client.hubs();
+    expect(Array.isArray(hubs)).toBe(true);
+  });
+
+  it("sectionHubs returns an array for a known section", async () => {
+    const hubs = await client.sectionHubs(fixtures.showSectionId);
+    expect(Array.isArray(hubs)).toBe(true);
+  });
+
+  it("related returns an array for a known item", async () => {
+    const items = await client.related(fixtures.showRatingKey);
+    expect(Array.isArray(items)).toBe(true);
+  });
+
+  it("similar returns an array for a known item", async () => {
+    const items = await client.similar(fixtures.showRatingKey);
+    expect(Array.isArray(items)).toBe(true);
+  });
+
   describe("browse — pagination", () => {
     // Regression test for the X-Plex-Container-Start/Size pairing
     // bug we hit during v0.2: Plex silently ignores Size unless
