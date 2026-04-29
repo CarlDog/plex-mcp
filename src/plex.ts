@@ -76,6 +76,13 @@ export class PlexClient {
     return data.MediaContainer?.Metadata ?? [];
   }
 
+  async nowPlaying(): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      "/status/sessions",
+    );
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
   async browse(
     sectionId: string,
     options: { offset?: number; limit?: number; type?: number } = {},

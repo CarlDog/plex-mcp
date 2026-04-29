@@ -114,6 +114,17 @@ function createServer(): McpServer {
   );
 
   server.registerTool(
+    "plex_now_playing",
+    {
+      title: "Plex Now Playing",
+      description:
+        "Get currently-playing sessions on the Plex server. Each session includes the item being played, the user, player device, and transcoding info.",
+      inputSchema: {},
+    },
+    async () => asText(await plex.nowPlaying()),
+  );
+
+  server.registerTool(
     "plex_browse",
     {
       title: "Browse Plex Library",
