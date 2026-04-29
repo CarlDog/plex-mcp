@@ -66,16 +66,32 @@ downloader-mcp.
   dynamically at bootstrap so the suite survives a Plex DB rebuild.
   Env-gated: skipped when `PLEX_URL`/`PLEX_TOKEN` aren't set, so CI
   passes without secrets. Wired into the existing test workflow.
+- **`src/tools/` refactor.** Tool registrations split out of
+  `src/index.ts` into per-domain modules: `discovery.ts`,
+  `sessions.ts`, `playback.ts`, `playlists.ts`, plus `helpers.ts`
+  for shared utilities. `index.ts` shrunk from ~290 lines to ~110
+  (env, transport, lifecycle only). Mechanical, no behavior change;
+  tests passed before/after.
+- **v0.3 shipped: 6 new playlist tools (11 → 17 total).** Reads:
+  `plex_list_playlists`, `plex_get_playlist_items`. Writes:
+  `plex_create_playlist`, `plex_add_to_playlist`,
+  `plex_remove_from_playlist`, `plex_delete_playlist`. Smart
+  playlists visible via list but not mutated (filter-expression
+  shape out of scope). Test coverage: full CRUD round-trip
+  (create → list → get items → add → remove → delete) plus
+  standalone `getMachineIdentifier` / `metadataUri` checks.
+  PlexClient gained HTTP-method support on `request` /
+  `requestNoContent` to handle POST/PUT/DELETE.
 
 ## Next
 
-- **v0.3 — Playlists.** Full CRUD: list, get contents, create, add,
-  remove, delete (5–6 tools). Likely triggers the `src/tools/`
-  refactor per CLAUDE.md's threshold.
 - **v0.4 — Curated discovery + watch state extensions.** Plex hubs
   (`/hubs`, `/hubs/sections/{id}`), related/similar
   (`/library/metadata/{key}/related`, `/similar`), update timeline
   (`/:/timeline`). Smaller batch; can be bundled.
+- **CI Plex secrets** — wire `PLEX_URL`/`PLEX_TOKEN` into GHA
+  secrets so the integration suite actually runs on CI rather than
+  always skipping. Requires a CI-reachable Plex.
 
 ## Open Decisions
 

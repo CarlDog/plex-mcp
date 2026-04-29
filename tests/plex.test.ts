@@ -17,7 +17,7 @@
 // overwrites `lastViewedAt` to "now" on every call, so the original
 // timestamp of that watch is bumped by ~seconds. See
 // `docs/PLEX-API.md` for the full gotcha.
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PlexClient } from "../src/plex.js";
 
 const PLEX_URL = process.env.PLEX_URL;
@@ -114,6 +114,24 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     expect(Array.isArray(sessions)).toBe(true);
   });
 
+  it("listPlaylists returns an array", async () => {
+    const playlists = await client.listPlaylists();
+    expect(Array.isArray(playlists)).toBe(true);
+  });
+
+  it("getMachineIdentifier returns a non-empty string", async () => {
+    const id = await client.getMachineIdentifier();
+    expect(typeof id).toBe("string");
+    expect(id.length).toBeGreaterThan(0);
+  });
+
+  it("metadataUri builds a server:// URI containing the rating key", async () => {
+    const uri = await client.metadataUri("12345");
+    expect(uri).toMatch(
+      /^server:\/\/[^/]+\/com\.plexapp\.plugins\.library\/library\/metadata\/12345$/,
+    );
+  });
+
   describe("browse — pagination", () => {
     // Regression test for the X-Plex-Container-Start/Size pairing
     // bug we hit during v0.2: Plex silently ignores Size unless
@@ -174,6 +192,95 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       if (items.length >= 2) {
         expect(items[0].viewedAt).toBeGreaterThanOrEqual(items[1].viewedAt);
       }
+    });
+  });
+
+  // Full CRUD round-trip on regular playlists. Creates a temp
+  // playlist, adds/removes items, deletes it. Cleanup in afterAll
+  // in case any step fails partway through.
+  describe.sequential("playlist round trip (CRUD)", () => {
+    let playlistId: string | undefined;
+    let item1Key: string;
+    let item2Key: string;
+
+    beforeAll(async () => {
+      const browse = await client.browse(fixtures.showSectionId, {
+        type: 4, // episode
+        limit: 2,
+      });
+      if (browse.items.length < 2) {
+        throw new Error(
+          "Test fixture: need ≥2 episodes in the show-type library for the playlist round-trip",
+        );
+      }
+      item1Key = (browse.items[0] as { ratingKey: string }).ratingKey;
+      item2Key = (browse.items[1] as { ratingKey: string }).ratingKey;
+    });
+
+    afterAll(async () => {
+      if (playlistId) {
+        try {
+          await client.deletePlaylist(playlistId);
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    });
+
+    it("creates a playlist seeded with one item", async () => {
+      const result = (await client.createPlaylist({
+        title: `plex-mcp test ${Date.now()}`,
+        type: "video",
+        ratingKey: item1Key,
+      })) as { ratingKey: string } | undefined;
+      expect(result).toBeDefined();
+      playlistId = result!.ratingKey;
+      expect(typeof playlistId).toBe("string");
+    });
+
+    it("appears in listPlaylists", async () => {
+      const playlists = (await client.listPlaylists()) as Array<{
+        ratingKey: string;
+      }>;
+      expect(playlists.some((p) => p.ratingKey === playlistId)).toBe(true);
+    });
+
+    it("getPlaylistItems returns the seed item", async () => {
+      const items = (await client.getPlaylistItems(playlistId!)) as Array<{
+        ratingKey: string;
+      }>;
+      expect(items.length).toBe(1);
+      expect(items[0].ratingKey).toBe(item1Key);
+    });
+
+    it("addToPlaylist appends a second item", async () => {
+      await client.addToPlaylist(playlistId!, item2Key);
+      const items = (await client.getPlaylistItems(playlistId!)) as Array<{
+        ratingKey: string;
+      }>;
+      expect(items.length).toBe(2);
+    });
+
+    it("removeFromPlaylist removes by playlistItemID", async () => {
+      const before = (await client.getPlaylistItems(playlistId!)) as Array<{
+        playlistItemID: number;
+      }>;
+      expect(before.length).toBe(2);
+      await client.removeFromPlaylist(
+        playlistId!,
+        String(before[0].playlistItemID),
+      );
+      const after = (await client.getPlaylistItems(playlistId!)) as unknown[];
+      expect(after.length).toBe(1);
+    });
+
+    it("deletePlaylist removes the playlist", async () => {
+      await client.deletePlaylist(playlistId!);
+      const playlists = (await client.listPlaylists()) as Array<{
+        ratingKey: string;
+      }>;
+      expect(playlists.some((p) => p.ratingKey === playlistId)).toBe(false);
+      playlistId = undefined; // signal afterAll: nothing to clean up
     });
   });
 
