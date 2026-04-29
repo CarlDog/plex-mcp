@@ -13,6 +13,7 @@ export class PlexClient {
   private async request<T>(
     path: string,
     params: Record<string, string> = {},
+    headers: Record<string, string> = {},
   ): Promise<PlexResponse<T>> {
     const url = new URL(path, this.config.url);
     for (const [k, v] of Object.entries(params)) {
@@ -22,6 +23,7 @@ export class PlexClient {
       headers: {
         "X-Plex-Token": this.config.token,
         Accept: "application/json",
+        ...headers,
       },
     });
     if (!res.ok) {
@@ -31,6 +33,25 @@ export class PlexClient {
       );
     }
     return (await res.json()) as PlexResponse<T>;
+  }
+
+  private async requestNoContent(
+    path: string,
+    params: Record<string, string> = {},
+  ): Promise<void> {
+    const url = new URL(path, this.config.url);
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+    const res = await fetch(url, {
+      headers: { "X-Plex-Token": this.config.token },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(
+        `Plex ${res.status} ${res.statusText} for ${path}: ${body.slice(0, 200)}`,
+      );
+    }
   }
 
   async listLibraries(): Promise<unknown[]> {
@@ -67,5 +88,100 @@ export class PlexClient {
       `/library/metadata/${ratingKey}`,
     );
     return data.MediaContainer?.Metadata?.[0];
+  }
+
+  async getChildren(ratingKey: string): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      `/library/metadata/${ratingKey}/children`,
+    );
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
+  async nowPlaying(): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      "/status/sessions",
+    );
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
+  async history(
+    options: { offset?: number; limit?: number; sectionId?: string } = {},
+  ): Promise<{
+    total: number;
+    offset: number;
+    size: number;
+    items: unknown[];
+  }> {
+    // Plex needs BOTH X-Plex-Container-Start and X-Plex-Container-Size
+    // present — sending only Size is silently ignored. Always send both.
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 50;
+    const params: Record<string, string> = { sort: "viewedAt:desc" };
+    const headers: Record<string, string> = {
+      "X-Plex-Container-Start": String(offset),
+      "X-Plex-Container-Size": String(limit),
+    };
+    if (options.sectionId !== undefined) {
+      params.librarySectionID = options.sectionId;
+    }
+    const data = await this.request<{
+      Metadata?: unknown[];
+      totalSize?: number;
+    }>("/status/sessions/history/all", params, headers);
+    const items = data.MediaContainer?.Metadata ?? [];
+    return {
+      total: data.MediaContainer?.totalSize ?? items.length,
+      offset,
+      size: items.length,
+      items,
+    };
+  }
+
+  async browse(
+    sectionId: string,
+    options: { offset?: number; limit?: number; type?: number } = {},
+  ): Promise<{
+    total: number;
+    offset: number;
+    size: number;
+    items: unknown[];
+  }> {
+    // Plex needs BOTH X-Plex-Container-Start and X-Plex-Container-Size
+    // present — sending only Size is silently ignored. Always send both.
+    const offset = options.offset ?? 0;
+    const limit = options.limit ?? 50;
+    const params: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      "X-Plex-Container-Start": String(offset),
+      "X-Plex-Container-Size": String(limit),
+    };
+    if (options.type !== undefined) {
+      params.type = String(options.type);
+    }
+    const data = await this.request<{
+      Metadata?: unknown[];
+      totalSize?: number;
+    }>(`/library/sections/${sectionId}/all`, params, headers);
+    const items = data.MediaContainer?.Metadata ?? [];
+    return {
+      total: data.MediaContainer?.totalSize ?? items.length,
+      offset,
+      size: items.length,
+      items,
+    };
+  }
+
+  async markWatched(ratingKey: string): Promise<void> {
+    await this.requestNoContent("/:/scrobble", {
+      key: ratingKey,
+      identifier: "com.plexapp.plugins.library",
+    });
+  }
+
+  async markUnwatched(ratingKey: string): Promise<void> {
+    await this.requestNoContent("/:/unscrobble", {
+      key: ratingKey,
+      identifier: "com.plexapp.plugins.library",
+    });
   }
 }

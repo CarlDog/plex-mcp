@@ -22,10 +22,20 @@ const asText = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
 });
 
+const PLEX_TYPE_CODES: Record<string, number> = {
+  movie: 1,
+  show: 2,
+  season: 3,
+  episode: 4,
+  artist: 8,
+  album: 9,
+  track: 10,
+};
+
 function createServer(): McpServer {
   const server = new McpServer({
     name: "plex-mcp",
-    version: "0.1.0",
+    version: "0.2.0",
   });
 
   server.registerTool(
@@ -86,6 +96,145 @@ function createServer(): McpServer {
       },
     },
     async ({ rating_key }) => asText(await plex.getItem(rating_key)),
+  );
+
+  server.registerTool(
+    "plex_get_children",
+    {
+      title: "Get Plex Item Children",
+      description:
+        "Get child items of a parent: show → seasons, season → episodes, artist → albums, album → tracks. Use plex_get_item or plex_search to find the parent's rating_key first.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the parent item"),
+      },
+    },
+    async ({ rating_key }) => asText(await plex.getChildren(rating_key)),
+  );
+
+  server.registerTool(
+    "plex_now_playing",
+    {
+      title: "Plex Now Playing",
+      description:
+        "Get currently-playing sessions on the Plex server. Each session includes the item being played, the user, player device, and transcoding info.",
+      inputSchema: {},
+    },
+    async () => asText(await plex.nowPlaying()),
+  );
+
+  server.registerTool(
+    "plex_history",
+    {
+      title: "Plex Watch History",
+      description:
+        "List playback history entries, sorted most recent first. Paged like plex_browse. Optionally filter to a single library section.",
+      inputSchema: {
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Pagination offset (default 0)"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe("Page size, max 200 (default 50)"),
+        section_id: z
+          .string()
+          .optional()
+          .describe("Optional library section ID to filter to"),
+      },
+    },
+    async ({ offset, limit, section_id }) =>
+      asText(await plex.history({ offset, limit, sectionId: section_id })),
+  );
+
+  server.registerTool(
+    "plex_browse",
+    {
+      title: "Browse Plex Library",
+      description:
+        "List items in a specific library section, paged. Use plex_list_libraries first to get section IDs. Returns { total, offset, size, items } so the assistant can page through large libraries.",
+      inputSchema: {
+        section_id: z
+          .string()
+          .describe("Library section ID (from plex_list_libraries)"),
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Pagination offset (default 0)"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe("Page size, max 200 (default 50)"),
+        type: z
+          .enum([
+            "movie",
+            "show",
+            "season",
+            "episode",
+            "artist",
+            "album",
+            "track",
+          ])
+          .optional()
+          .describe("Filter to a specific item type"),
+      },
+    },
+    async ({ section_id, offset, limit, type }) =>
+      asText(
+        await plex.browse(section_id, {
+          offset,
+          limit,
+          type: type ? PLEX_TYPE_CODES[type] : undefined,
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "plex_mark_watched",
+    {
+      title: "Mark Plex Item Watched",
+      description:
+        "Mark a Plex item as watched (mutates server state). Reversible via plex_mark_unwatched.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the item to mark watched"),
+      },
+    },
+    async ({ rating_key }) => {
+      await plex.markWatched(rating_key);
+      return asText({ marked: "watched", rating_key });
+    },
+  );
+
+  server.registerTool(
+    "plex_mark_unwatched",
+    {
+      title: "Mark Plex Item Unwatched",
+      description:
+        "Mark a Plex item as unwatched (mutates server state). Reversible via plex_mark_watched.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the item to mark unwatched"),
+      },
+    },
+    async ({ rating_key }) => {
+      await plex.markUnwatched(rating_key);
+      return asText({ marked: "unwatched", rating_key });
+    },
   );
 
   return server;
