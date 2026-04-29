@@ -22,6 +22,16 @@ const asText = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
 });
 
+const PLEX_TYPE_CODES: Record<string, number> = {
+  movie: 1,
+  show: 2,
+  season: 3,
+  episode: 4,
+  artist: 8,
+  album: 9,
+  track: 10,
+};
+
 function createServer(): McpServer {
   const server = new McpServer({
     name: "plex-mcp",
@@ -86,6 +96,53 @@ function createServer(): McpServer {
       },
     },
     async ({ rating_key }) => asText(await plex.getItem(rating_key)),
+  );
+
+  server.registerTool(
+    "plex_browse",
+    {
+      title: "Browse Plex Library",
+      description:
+        "List items in a specific library section, paged. Use plex_list_libraries first to get section IDs. Returns { total, offset, size, items } so the assistant can page through large libraries.",
+      inputSchema: {
+        section_id: z
+          .string()
+          .describe("Library section ID (from plex_list_libraries)"),
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Pagination offset (default 0)"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe("Page size, max 200 (default 50)"),
+        type: z
+          .enum([
+            "movie",
+            "show",
+            "season",
+            "episode",
+            "artist",
+            "album",
+            "track",
+          ])
+          .optional()
+          .describe("Filter to a specific item type"),
+      },
+    },
+    async ({ section_id, offset, limit, type }) =>
+      asText(
+        await plex.browse(section_id, {
+          offset,
+          limit: limit ?? 50,
+          type: type ? PLEX_TYPE_CODES[type] : undefined,
+        }),
+      ),
   );
 
   return server;
