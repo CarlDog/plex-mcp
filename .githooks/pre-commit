@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "ERROR: gitleaks not installed. Install from https://github.com/gitleaks/gitleaks" >&2
+  exit 1
+fi
+
+echo "Running gitleaks..."
+gitleaks protect --staged --redact --config .gitleaks.toml
