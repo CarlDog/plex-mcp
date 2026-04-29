@@ -43,6 +43,36 @@ The watch-state mutation endpoints don't return JSON — body is empty.
 The default `PlexClient.request` calls `res.json()` unconditionally
 and would throw. `PlexClient.requestNoContent` exists for this case.
 
+### `/:/scrobble` overwrites `lastViewedAt` and writes a new history entry every call
+
+Calling `scrobble` on an already-watched item is **not** a no-op. Each
+call:
+
+- Sets `lastViewedAt` to "now" (replacing the previous value)
+- Writes a new entry to `/status/sessions/history/all`, *replacing*
+  any existing history entry for the same item (the original entry's
+  timestamp is lost)
+
+Verified empirically via round-trip (`mark_watched` → `mark_unwatched`
+→ `mark_watched`): the item's `lastViewedAt` returned to "watched"
+state but with the timestamp of the third call, not the original.
+
+Implications:
+
+- "Continue Watching" / "On Deck" sorting treats a re-scrobbled item
+  as just-watched, which can shuffle the user's queue.
+- An LLM tool-using `plex_mark_watched` defensively to "make sure
+  it's marked watched" will silently destroy the original
+  `lastViewedAt`. Don't call mark_watched if the state is already
+  correct.
+- `plex_mark_unwatched` does not have this issue — it just clears
+  state.
+
+`/:/unscrobble` followed by `/:/scrobble` is a *destructive* round
+trip on the timestamp. There's no Plex API to set `lastViewedAt` to
+a specific value; the only way to set it is via the live timeline
+endpoint while playback is occurring.
+
 ### `type` filter expects integer codes
 
 `/library/sections/{id}/all?type=N` accepts integers:
