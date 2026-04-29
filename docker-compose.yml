@@ -10,6 +10,10 @@ services:
       MCP_PORT: "3000"
       PLEX_URL: "${PLEX_URL}"
       PLEX_TOKEN: "${PLEX_TOKEN}"
+    extra_hosts:
+      # Lets the container reach Plex when it's running on the same host.
+      # Use PLEX_URL=http://host.docker.internal:32400 in that case.
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://localhost:3000/health"]
       interval: 30s

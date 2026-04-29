@@ -28,6 +28,13 @@ To find your Plex token, see Plex's
 [Finding an authentication token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
 guide.
 
+> **Plex on the same host as the container?** Use
+> `PLEX_URL=http://host.docker.internal:32400`. The compose file maps
+> `host.docker.internal` to the Docker host gateway via `extra_hosts`,
+> so the container can reach a Plex server running on the host. The
+> host's own hostname (e.g. `my-nas`) won't resolve from inside the
+> container without that mapping.
+
 ## Transport modes
 
 | Mode | When to use | How to start |
