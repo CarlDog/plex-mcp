@@ -111,6 +111,10 @@ docker compose up --build
 - HTTP mode currently has **no auth** — bind only to private networks.
   Rely on host firewall / LAN isolation. Add a bearer token if ever
   exposed beyond a trusted network.
+- **Git workflow: commit directly to `main` and push.** This is a
+  personal repo — no PRs, no feature branches, no review gate. Releases
+  are tagged directly on `main` (`git tag -a vX.Y.Z`). The pre-commit
+  hook (gitleaks + PII + author-identity check) is the safety net.
 
 ## Testing
 
