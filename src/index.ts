@@ -22,11 +22,26 @@ if (!PLEX_URL || !PLEX_TOKEN) {
 
 const plex = new PlexClient({ url: PLEX_URL, token: PLEX_TOKEN });
 
+const INSTRUCTIONS = `MCP server for Plex Media Server. Lets you search libraries, browse recently-added / on-deck / now-playing, fetch full metadata, manage playlists, and mark items watched/unwatched.
+
+Idioms:
+- Every item has a ratingKey (string). Same ID space across movies, shows, episodes, music. Get one from a search/list call, then drill into it with plex_get_item or plex_get_children.
+- plex_search searches across all libraries; plex_browse is section-scoped — call plex_list_libraries first to get section IDs.
+- plex_history is server-wide watch history; plex_now_playing is current streaming sessions only.
+- Mutation tools (playlist create/delete/add/remove, mark watched/unwatched) change server state. Confirm with the user before invoking unless intent is unambiguous.
+
+Auth: a single Plex token, scoped to one user account on the server. Operations affect that account's view.`;
+
 function createServer(): McpServer {
-  const server = new McpServer({
-    name: "plex-mcp",
-    version: "0.4.0",
-  });
+  const server = new McpServer(
+    {
+      name: "plex-mcp",
+      version: "0.4.0",
+    },
+    {
+      instructions: INSTRUCTIONS,
+    },
+  );
   registerTools(server, plex);
   return server;
 }
