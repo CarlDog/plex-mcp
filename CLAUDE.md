@@ -150,11 +150,15 @@ opened in this directory:
   Project memories are written under the `plex-mcp` Serena project.
   Re-onboarding isn't needed; if memories drift, update them with
   `mcp__serena__write_memory`.
-- **OpenChronicle** — registered at *local scope* for this directory
-  via `claude mcp add openchronicle -- oc mcp serve`. Effective for
-  future Claude Code sessions opened with cwd = repo root. Config lives
-  in `~/.claude.json` under the project entry — not committed.
+- **OpenChronicle** — accessed via the containerized OC MCP server
+  (the local `oc` CLI / host db is dead, don't try to use it). The
+  plex-mcp project lives in OC's container db at project_id
+  `8d57aaa3-09b0-42df-9337-f86c557b2d27`. Pinned session handoffs
+  live there — fetch with `mcp__openchronicle__memory_list` then
+  filter by that project_id (memory_list itself is global; results
+  carry their project_id).
 
-If you re-clone the repo on another machine, re-register OpenChronicle
-with the same command. Serena will work automatically if it's already
+If you re-clone the repo on another machine, the OC container needs
+its own plex-mcp project (the project_id above is specific to the
+current container db). Serena will work automatically if it's already
 user-scoped on that machine.
