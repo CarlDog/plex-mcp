@@ -155,12 +155,12 @@ opened in this directory:
   serve every project). The legacy `oc mcp serve` stdio form and the
   host `oc` CLI are both dead — don't try to use them.
 
-OC project lookup is name-based: the `oc-context` and `oc-handoff`
-skills resolve the project for this repo by matching `project_list`
-against the basename of cwd (`plex-mcp`). If no match exists,
-`oc-handoff` auto-creates one on first run. Past handoffs from before
-the v3 rebuild were lost when the container DB was wiped — the
-project gets re-seeded organically as new handoffs land.
+OC project lookup is name-based: the `oc-context` skill (run at
+session start) resolves the project for this repo by matching
+`project_list` against the basename of cwd (`plex-mcp`). The OC
+project for this repo is `e27af55d-2ec0-48c7-b72f-adff2014c199`
+(re-created 2026-05-06 after the v3 container DB wipe). Save new
+memories with the `oc-save` skill; recall with `oc-recall`.
 
 If you re-clone the repo on another machine, you'll need the OC HTTP
 MCP registered there (the URL above only works on a host that can
