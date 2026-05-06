@@ -150,15 +150,19 @@ opened in this directory:
   Project memories are written under the `plex-mcp` Serena project.
   Re-onboarding isn't needed; if memories drift, update them with
   `mcp__serena__write_memory`.
-- **OpenChronicle** — accessed via the containerized OC MCP server
-  (the local `oc` CLI / host db is dead, don't try to use it). The
-  plex-mcp project lives in OC's container db at project_id
-  `8d57aaa3-09b0-42df-9337-f86c557b2d27`. Pinned session handoffs
-  live there — fetch with `mcp__openchronicle__memory_list` then
-  filter by that project_id (memory_list itself is global; results
-  carry their project_id).
+- **OpenChronicle** — user-scoped HTTP MCP at
+  `http://carldog-nas:18000/mcp` (v3, unified ASGI; same image and DB
+  serve every project). The legacy `oc mcp serve` stdio form and the
+  host `oc` CLI are both dead — don't try to use them.
 
-If you re-clone the repo on another machine, the OC container needs
-its own plex-mcp project (the project_id above is specific to the
-current container db). Serena will work automatically if it's already
+OC project lookup is name-based: the `oc-context` and `oc-handoff`
+skills resolve the project for this repo by matching `project_list`
+against the basename of cwd (`plex-mcp`). If no match exists,
+`oc-handoff` auto-creates one on first run. Past handoffs from before
+the v3 rebuild were lost when the container DB was wiped — the
+project gets re-seeded organically as new handoffs land.
+
+If you re-clone the repo on another machine, you'll need the OC HTTP
+MCP registered there (the URL above only works on a host that can
+resolve `carldog-nas`). Serena will work automatically if it's already
 user-scoped on that machine.
