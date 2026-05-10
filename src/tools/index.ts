@@ -4,6 +4,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { PlexClient } from "../plex.js";
+import { registerAdminTools } from "./admin.js";
 import { registerDiscoveryTools } from "./discovery.js";
 import { registerHubsTools } from "./hubs.js";
 import { registerPlaybackTools } from "./playback.js";
@@ -16,4 +17,5 @@ export function registerTools(server: McpServer, plex: PlexClient): void {
   registerPlaybackTools(server, plex);
   registerPlaylistsTools(server, plex);
   registerHubsTools(server, plex);
+  registerAdminTools(server, plex);
 }

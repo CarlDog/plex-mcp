@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-04-29
+**Last updated:** 2026-05-10
 
 ## Phase
 
@@ -95,12 +95,29 @@ downloader-mcp.
   `logging:` block in compose caps log size at ~30MB with automatic
   rotation.
 
+- **v0.5 shipped: 3 new admin tools (21 → 24 total).**
+  `plex_refresh_metadata` (PUT `/library/metadata/{key}/refresh`,
+  optional `force=1`), `plex_get_matches` (GET `/.../matches?manual=1`
+  with title/year/agent/language overrides), `plex_apply_match` (PUT
+  `/.../match?guid=&name=`). New `src/tools/admin.ts` module wired via
+  `registerAdminTools`. The fix-unmatched-item flow:
+  `plex_get_matches` → pick the right SearchResult → `plex_apply_match`
+  → optional `plex_refresh_metadata` to pull poster/summary. Tests:
+  refresh + getMatches read-paths covered; applyMatch round-trips by
+  re-applying the item's current GUID back to itself (skipped when the
+  fixture is on `tv.plex.agents.none`). Originally surfaced when a
+  Plex audit session found 19 movies still bearing raw torrent
+  filenames as titles because they were bound to the `agents.none`
+  agent — files on disk were correctly named with `{imdb-tt...}` IDs,
+  but Plex never re-matched.
+
 ## Next
 
-- **v0.5 scope to plan.** Possible candidates: smart-playlist support
-  (filter expressions), per-tool args redaction policy if any future
-  tool takes free-text content, `/transcode/sessions` for visibility
-  into active transcoding, server admin ops (refresh, scan).
+- **v0.6 scope to plan.** Remaining v0.5 candidates that didn't land:
+  smart-playlist support (filter expressions), per-tool args redaction
+  policy if any future tool takes free-text content,
+  `/transcode/sessions` for visibility into active transcoding,
+  section-level refresh/scan, item unmatch.
 - **CI integration tests are skipped by default.** Personal repo;
   if anyone wants CI to actually exercise the suite, they wire up
   their own Plex endpoint as GHA secrets. Decided not to do this
