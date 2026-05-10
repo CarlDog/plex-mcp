@@ -362,4 +362,75 @@ export class PlexClient {
       identifier: "com.plexapp.plugins.library",
     });
   }
+
+  /**
+   * Tell Plex to re-pull metadata for an item from its currently-bound
+   * agent. Useful when poster/summary/etc. are stale, or after fixing
+   * a match. Empty 200 response — uses requestNoContent.
+   *
+   * `force=true` bypasses the agent's cache and does a deep refresh.
+   */
+  async refreshMetadata(
+    ratingKey: string,
+    options: { force?: boolean } = {},
+  ): Promise<void> {
+    const params: Record<string, string> = {};
+    if (options.force) params.force = "1";
+    await this.requestNoContent(
+      `/library/metadata/${ratingKey}/refresh`,
+      params,
+      "PUT",
+    );
+  }
+
+  /**
+   * List candidate matches that Plex's metadata agent considers for an
+   * item. Read-only. Pass title/year/agent/language to override what
+   * Plex auto-searches with — useful when the filename-derived title
+   * isn't matching anything.
+   *
+   * Returns the SearchResult array with shape:
+   *   [{ name, year, guid, score, lifespanEnded?, summary?, ... }]
+   */
+  async getMatches(
+    ratingKey: string,
+    options: {
+      agent?: string;
+      language?: string;
+      title?: string;
+      year?: number;
+    } = {},
+  ): Promise<unknown[]> {
+    const params: Record<string, string> = { manual: "1" };
+    if (options.agent) params.agent = options.agent;
+    if (options.language) params.language = options.language;
+    if (options.title) params.title = options.title;
+    if (options.year !== undefined) params.year = String(options.year);
+    const data = await this.request<{ SearchResult?: unknown[] }>(
+      `/library/metadata/${ratingKey}/matches`,
+      params,
+    );
+    return data.MediaContainer?.SearchResult ?? [];
+  }
+
+  /**
+   * Apply a specific match to an item, overwriting the current agent
+   * binding. `guid` and `name` come from a `getMatches` SearchResult
+   * entry. Empty 200 response.
+   *
+   * NOT reversible cleanly — re-applying a different match overwrites
+   * again, but the original "no match" / agents.none state can't be
+   * restored without unmatch (not yet exposed).
+   */
+  async applyMatch(
+    ratingKey: string,
+    guid: string,
+    name: string,
+  ): Promise<void> {
+    await this.requestNoContent(
+      `/library/metadata/${ratingKey}/match`,
+      { guid, name },
+      "PUT",
+    );
+  }
 }

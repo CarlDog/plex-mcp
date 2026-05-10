@@ -126,6 +126,9 @@ by default.
 | `plex_section_hubs`    | `GET /hubs/sections/{id}`                                             | Same shape, scoped to a single section                                 |
 | `plex_related`         | `GET /library/metadata/{key}/related`                                 | Provenance-grouped "related" hubs for an item                          |
 | `plex_similar`         | `GET /library/metadata/{key}/similar`                                 | Algorithmic similarity (flat Metadata list)                            |
+| `plex_refresh_metadata`| `PUT /library/metadata/{key}/refresh[?force=1]`                       | Empty 200 — re-pulls metadata from current agent                       |
+| `plex_get_matches`     | `GET /library/metadata/{key}/matches?manual=1[&agent=&language=&title=&year=]` | Returns `MediaContainer.SearchResult[]` candidates              |
+| `plex_apply_match`     | `PUT /library/metadata/{key}/match?guid=&name=`                       | Empty 200 — overwrites current agent binding                           |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.
@@ -141,7 +144,8 @@ against plexapi.dev / python-plexapi before relying on the shape.
 | Smart playlists (filter expressions)    | `POST /playlists?type=&smart=1&uri=` (filter shape via `library:///` URI)                | Medium (complex shape)   |
 | Rate item                               | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` (0–10 → 0–5 stars) | Low                      |
 | Edit metadata field                     | `PUT /library/metadata/{key}?<field>.value=...`                                          | Medium (LLM might mangle) |
-| Refresh / scan section                  | `GET /library/sections/{id}/refresh[?force=1]`                                           | Medium (server load)     |
+| Refresh / scan section (full)           | `GET /library/sections/{id}/refresh[?force=1]`                                           | Medium (server load)     |
+| Unmatch item                            | `PUT /library/metadata/{key}/unmatch`                                                    | Low (sets agent to none) |
 | Empty section trash                     | `PUT /library/sections/{id}/emptyTrash`                                                  | Medium (irreversible)    |
 | Update playback timeline                | `GET /:/timeline?ratingKey=...&time=...&state=playing\|paused\|stopped`                  | Low                      |
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |

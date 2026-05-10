@@ -304,6 +304,60 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     });
   });
 
+  describe("admin — refreshMetadata / getMatches / applyMatch", () => {
+    it("refreshMetadata succeeds on a known item", async () => {
+      // No-op for a healthy item in terms of observable state, but
+      // exercises the PUT /refresh endpoint and asserts no error.
+      await client.refreshMetadata(fixtures.showRatingKey);
+    });
+
+    it("refreshMetadata with force=true succeeds", async () => {
+      await client.refreshMetadata(fixtures.showRatingKey, { force: true });
+    });
+
+    it("getMatches returns an array for a known item", async () => {
+      const matches = await client.getMatches(fixtures.showRatingKey);
+      expect(Array.isArray(matches)).toBe(true);
+    });
+
+    it("getMatches accepts title/year overrides", async () => {
+      // Just exercising the param-passing path — Plex may or may not
+      // return results depending on whether the override matches
+      // anything. Either way it should be an array, no error.
+      const matches = await client.getMatches(fixtures.showRatingKey, {
+        title: "the",
+        year: 2010,
+      });
+      expect(Array.isArray(matches)).toBe(true);
+    });
+
+    // applyMatch is exercised by re-applying the item's current match
+    // back to itself — net no-op on observable state, validates the
+    // PUT /match endpoint shape. Skipped if the fixture item is on
+    // the `tv.plex.agents.none` agent (no current match to re-apply).
+    it("applyMatch round-trips without changing the bound match", async () => {
+      const item = (await client.getItem(fixtures.showRatingKey)) as {
+        guid?: string;
+        title?: string;
+      };
+      if (
+        !item.guid ||
+        item.guid.startsWith("tv.plex.agents.none://") ||
+        !item.title
+      ) {
+        console.warn(
+          "[skip] fixture item is unmatched or missing title; applyMatch not exercised",
+        );
+        return;
+      }
+      await client.applyMatch(fixtures.showRatingKey, item.guid, item.title);
+      const after = (await client.getItem(fixtures.showRatingKey)) as {
+        guid?: string;
+      };
+      expect(after.guid).toBe(item.guid);
+    });
+  });
+
   // .sequential because we don't want parallel mutations on the
   // same item across other (hypothetical future) write tests.
   describe.sequential("mark_watched / mark_unwatched round trip", () => {
