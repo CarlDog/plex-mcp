@@ -358,6 +358,55 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     });
   });
 
+  // SIDE EFFECT: this round trip leaves the fixture show's `summary`
+  // field at `locked=1` (whether or not it was locked before). Same
+  // class of side effect as the scrobble timestamp bump in the
+  // mark_watched test below — accepted because the value itself is
+  // restored. If a future audit flags a "locked summary" anomaly on
+  // the first show in the show-type library, that's this test.
+  describe.sequential("editMetadata round trip (summary field)", () => {
+    let originalSummary: string;
+
+    beforeAll(async () => {
+      const item = (await client.getItem(fixtures.showRatingKey)) as {
+        summary?: string;
+      };
+      originalSummary = item.summary ?? "";
+    });
+
+    afterAll(async () => {
+      // Best-effort restore even if a test mid-block failed. Empty
+      // string is a valid Plex summary; we don't want to leave the
+      // fixture with our sentinel.
+      try {
+        await client.editMetadata(fixtures.showRatingKey, {
+          summary: originalSummary,
+        });
+      } catch {
+        // already-restored or transient — not worth failing afterAll
+      }
+    });
+
+    it("sets and reads back a sentinel summary", async () => {
+      const sentinel = `plex-mcp editMetadata test ${Date.now()}`;
+      await client.editMetadata(fixtures.showRatingKey, { summary: sentinel });
+      const after = (await client.getItem(fixtures.showRatingKey)) as {
+        summary?: string;
+      };
+      expect(after.summary).toBe(sentinel);
+    });
+
+    it("restores the original summary", async () => {
+      await client.editMetadata(fixtures.showRatingKey, {
+        summary: originalSummary,
+      });
+      const after = (await client.getItem(fixtures.showRatingKey)) as {
+        summary?: string;
+      };
+      expect(after.summary).toBe(originalSummary);
+    });
+  });
+
   // .sequential because we don't want parallel mutations on the
   // same item across other (hypothetical future) write tests.
   describe.sequential("mark_watched / mark_unwatched round trip", () => {

@@ -33,6 +33,7 @@ your Plex libraries.
 | `plex_refresh_metadata` | Re-pull metadata for an item from its current agent (optional `force`) |
 | `plex_get_matches` | List candidate matches for an item (TMDB / TVDB / etc.); optional title/year/agent/language overrides |
 | `plex_apply_match` | Apply a chosen match (`guid`/`name`) to an item; overwrites the agent binding |
+| `plex_edit_metadata` | Override scalar metadata fields (title, summary, year, etc.) with field-level locking |
 
 ## Configuration
 
