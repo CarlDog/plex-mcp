@@ -251,6 +251,69 @@ downloader-mcp.
     "trigger refresh twice" pattern.
   - Sparse `fields` projection would help `sonarr_list_series`
     too — the 200-page-size response was 189k characters.
+
+- **Token economy / agent efficiency (cross-MCP architectural
+  pass).** The 2026-05-11 cleanup session burned through agent
+  context fast. Retro on where the tokens went, ordered by
+  impact-per-effort:
+  1. **Sparse `fields` projection on `plex_get_item`** — by
+     far the biggest single offender. Items with deep cast
+     (WM42, SS) returned 80–100 KB **each**; ~90% was `Role[]`
+     with hundreds of actor entries + thumb URLs, plus
+     `Producer[]`, `Image[]`, `Stream[]` per Part, plus
+     `UltraBlurColors`. Almost never needed; most calls wanted
+     `Media.Part.file` and `Guid[]`. **~50-line change. Ship
+     first.** Add a `minimal: true` shorthand that returns a
+     curated operational-fields set so callers don't have to
+     spell out the projection every time.
+  2. **Same projection pattern across the MCP family.**
+     `sonarr_list_series` (189 KB at page_size 200),
+     `sonarr_list_episodes`, `radarr_list_movies`. All have
+     the same shape problem.
+  3. **Search-by-attribute tools eliminate paging.** Paged
+     through 516 Sonarr records in 3 calls (~480 KB) to find
+     one show; a server-side title match would have been one
+     ~2 KB call. Concrete adds: `sonarr_find_series(term)`,
+     `radarr_find_movie(term)`, `plex_find_in_section(section_id,
+     title?, year?, has_match?)`.
+  4. **Compound / bulk operations collapse N round-trips into
+     1.** Patterns we hit repeatedly:
+     - "Get N items by rk" → N separate `plex_get_item` calls →
+       `plex_get_items_bulk(rating_keys[], fields=[...])`.
+     - "What's the file path for rk X?" → full get_item to read
+       one string → `plex_resolve_paths(rating_keys[])` returning
+       just `{rk: file}`.
+     - "Find duplicates" / "Find unmatched" → browse + per-item
+       drill → `plex_find_duplicates(section_id)` and
+       `plex_find_unmatched(section_id)` server-side.
+  5. **Response hygiene defaults** (additive, no caller change):
+     - Drop `UltraBlurColors` from every item (purely cosmetic,
+       ~80 bytes × every browse hit).
+     - `Image[]` duplicates the `thumb` / `art` paths already
+       on the item — drop by default.
+     - Cap `Role[]` at 10 by default, with `verbose=true` for
+       full cast.
+     - Collapse `Stream[]` to summary fields
+       (`audio_codec` / `video_codec` / `resolution`) by default.
+     - Trim `statistics.releaseGroups[]` on Sonarr/Radarr series
+       records.
+  6. **Self-verifying mutations** kill the post-action check
+     round-trip. Currently the agent does `mutate → list →
+     drill → verify`. If mutations return enough state inline,
+     the verify call disappears: `plex_apply_match` returning
+     `{guid, name, locked_fields, Guid[]}`; `plex_split_item`
+     returning new rks with their `Media.Part.file` paths;
+     `plex_edit_metadata` returning the full updated `Field[]`
+     lock state; `sonarr_refresh_series` with an optional
+     `wait: true` that completes after the disk-scan phase
+     instead of forcing the "refresh twice" pattern.
+  7. **Server `instructions` field as a free guardrail.** It's
+     loaded into every session anyway. Add a token-economy
+     note: "For audits, always pass `fields=[...]` to
+     `plex_browse` / `plex_get_item`. Full-shape responses
+     can run >50KB per item. Reserve full-shape calls for the
+     one item you're about to act on." Agents read it and
+     behave better at zero implementation cost.
 - **CI integration tests are skipped by default.** Personal repo;
   if anyone wants CI to actually exercise the suite, they wire up
   their own Plex endpoint as GHA secrets. Decided not to do this
