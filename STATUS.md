@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-13 (v0.6 ship + v0.7 split/merge + pkkid cross-validation)
+**Last updated:** 2026-05-11 (v0.8 candidates captured from extensive cleanup session)
 
 ## Phase
 
@@ -199,6 +199,58 @@ downloader-mcp.
     preceded within N tool calls by a `get_matches(ratingKey=X)`
     that returned `{guid: G}` should pass without a prompt. Two
     false-positive denials documented during the audit cleanup.
+- **v0.8 candidates (captured 2026-05-11 from WWE PPV
+  consolidation + Panty & Stocking multi-episode rename
+  session).** Concrete tool / doc gaps observed in actual use:
+  1. **Sparse `fields` projection on `plex_get_item`.** Items
+     with many Media variants blow the MCP response cap — Royal
+     Rumble 2025 had 14 variants, response was 97k characters,
+     forced a dump-file workaround. Same problem `plex_browse`
+     had pre-v0.6; same fix applies. Default-on filter for
+     `Role` / `Producer` / `Stream` arrays would help most.
+  2. **Document Editions thoroughly in `docs/PLEX-API.md`.** The
+     `editionTitle` field, the `{edition-<name>}` filename tag
+     Plex's scanner reads, and the consolidation recipe (multi-
+     night events sharing one IMDB/GUID → Editions instead of
+     fighting auto-merge with split/unmatch). This session
+     codified the convention; the API doc should reflect it.
+  3. **Document the `tv.plex.agents.none://<rating_key>` GUID
+     format** for unmatched items. Useful for tooling that
+     distinguishes matched vs unmatched without parsing the
+     `Guid` array.
+  4. **Document the ratingKey-churn-on-path-change behavior.**
+     When `fs_move` renames a folder/file, Plex's rescan
+     sometimes re-mints the ratingKey (creating a new item +
+     orphaning the old) instead of updating the path on the
+     existing rk. Locked title overrides do NOT always survive
+     this churn. Downstream callers holding rk references in
+     playlists, history, or external indices must be defensive.
+  5. **`plex_refresh_section` async semantics need a note in
+     the tool description.** Tool returns immediately, but the
+     server-side disk scan continues. Empirically: after bulk
+     `fs_move` operations, the *first* refresh detached old
+     episodeFileIds without re-attaching new ones; a *second*
+     refresh completed the reconciliation. Either document the
+     two-pass pattern or add an optional `wait_for_scan`
+     follow-up tool.
+  6. **`Field` array on `plex_get_item` exposes which fields
+     are locked** (`title`, `titleSort`, `thumb`, etc.). This is
+     useful for tooling but undocumented in PLEX-API.md. Worth
+     a one-liner.
+- **Cross-MCP observations (not plex-mcp's repo, but adjacent).**
+  - `servarr-mcp.sonarr_list_series` has no search-by-title.
+    Finding Panty & Stocking required paging through 516
+    records + Python dump-parsing. A `search` parameter or a
+    dedicated `sonarr_find_series_by_title(term)` tool would
+    cut this dramatically.
+  - `servarr-mcp.sonarr_refresh_series` triggers only metadata
+    refresh; the disk scan is opaquely chained on consecutive
+    calls. A dedicated `sonarr_rescan_series` tool (Sonarr's
+    own RescanSeries API command) would make the disk-scan
+    intent explicit instead of relying on the
+    "trigger refresh twice" pattern.
+  - Sparse `fields` projection would help `sonarr_list_series`
+    too — the 200-page-size response was 189k characters.
 - **CI integration tests are skipped by default.** Personal repo;
   if anyone wants CI to actually exercise the suite, they wire up
   their own Plex endpoint as GHA secrets. Decided not to do this
