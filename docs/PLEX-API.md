@@ -176,19 +176,23 @@ All requests carry `X-Plex-Token: <token>` as an HTTP header
 
 ## Endpoints we haven't built yet
 
-Candidates for v0.3+ with rough endpoint shapes so future-us has a
-starting point. **Not endorsed, not yet investigated** — verify
-against plexapi.dev / python-plexapi before relying on the shape.
+Candidates with rough endpoint shapes so future-us has a starting
+point. Shapes marked **✓ pkkid** have been confirmed against
+python-plexapi master (cross-validated 2026-05-13 — see section
+below). Shapes without ✓ are speculative.
 
-| Capability                              | Endpoint(s)                                                                              | Risk class               |
+| Capability                              | Endpoint(s)                                                                              | Risk                     |
 | --------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ |
 | Smart playlists (filter expressions)    | `POST /playlists?type=&smart=1&uri=` (filter shape via `library:///` URI)                | Medium (complex shape)   |
-| Rate item                               | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` (0–10 → 0–5 stars) | Low                      |
-| Edit metadata field                     | `PUT /library/metadata/{key}?<field>.value=...`                                          | Medium (LLM might mangle) |
-| Refresh / scan section (full)           | `GET /library/sections/{id}/refresh[?force=1]`                                           | Medium (server load)     |
-| Unmatch item                            | `PUT /library/metadata/{key}/unmatch`                                                    | Low (sets agent to none) |
-| Empty section trash                     | `PUT /library/sections/{id}/emptyTrash`                                                  | Medium (irreversible)    |
-| Update playback timeline                | `GET /:/timeline?ratingKey=...&time=...&state=playing\|paused\|stopped`                  | Low                      |
+| Rate item ✓ pkkid                       | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` (0–10 → 0–5 stars) | Low                      |
+| Update playback timeline ✓ pkkid        | `GET /:/timeline?ratingKey=...&key=...&identifier=...&time=...&state=...&duration=...`   | Low                      |
+| Update playback progress (lighter) ✓ pkkid | `GET /:/progress?key=...&identifier=...&time=...&state=...`                           | Low                      |
+| Remove from Continue Watching ✓ pkkid   | `PUT /actions/removeFromContinueWatching?ratingKey=...`                                  | Low (one-shot, reversible by viewing) |
+| Section-scoped on-deck ✓ pkkid          | `GET /library/sections/{id}/onDeck`                                                      | Low (read-only, fills a gap in plex_on_deck) |
+| Empty section trash ✓ pkkid             | `PUT /library/sections/{id}/emptyTrash`                                                  | Medium (irreversible)    |
+| Analyze section ✓ pkkid                 | `PUT /library/sections/{id}/analyze`                                                     | Medium (server load)     |
+| Continue Watching hub explicit ✓ pkkid  | `GET /hubs/continueWatching/items`                                                       | Low                      |
+| Hub-search (richer than `/search`) ✓ pkkid | `GET /hubs/search?query=&limit=&sectionId=&includeCollections=1&includeExternalMedia=1` | Low (additive vs `plex_search`) |
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |
 | Currently transcoding sessions          | `GET /transcode/sessions`                                                                | Low                      |
 
@@ -196,3 +200,55 @@ against plexapi.dev / python-plexapi before relying on the shape.
 `DELETE /library/sections/{id}`, and any other operation that destroys
 media or library structure. The cost of an LLM hallucinating a delete
 call is too high relative to the value of the tool.
+
+## Cross-validation against python-plexapi
+
+Last validated against
+[`pushingkarmaorg/python-plexapi@master`](https://github.com/pushingkarmaorg/python-plexapi/tree/master/plexapi)
+on **2026-05-13**. The 29 endpoints in our "currently used" table
+were spot-checked against pkkid's source where pkkid exposes the same
+operation. Match unless noted below.
+
+### Known shape divergences (both work; we pick the simpler one)
+
+- **`plex_search` uses `/search?query=` (legacy/simple).** pkkid's
+  `Server.search()` uses `/hubs/search` with `includeCollections=1`,
+  `includeExternalMedia=1`, and returns Hub-grouped results. Both
+  endpoints exist; `/search` is a lighter flat-list response, the
+  one we've used since v0.1. Adding a richer search variant via
+  `/hubs/search` is captured in "Endpoints we haven't built yet"
+  above.
+- **`plex_edit_metadata` uses `PUT /library/metadata/{rk}?...` (direct).**
+  pkkid edits via `PUT /library/sections/{section_id}/all?id={rk}&type={typeCode}&<field>.value=&<field>.locked=`
+  — same `.value=` / `.locked=` shape but routed through the
+  section's batch-edit endpoint, with `id=` and `type=` added.
+  Plex accepts both shapes; verified empirically when we fixed
+  the WWE titles in v0.6. Ours is simpler.
+- **`plex_refresh_metadata` (per-item) is not in pkkid.** pkkid
+  only wraps section-level refresh (`/library/sections/{id}/refresh`).
+  Per-item refresh (`PUT /library/metadata/{rk}/refresh[?force=1]`)
+  is the same endpoint Plex's web UI uses; we verified it works
+  empirically during the 2026-05-08 audit (used it on 19 movies
+  to pull fresh posters after re-matching). Don't expect pkkid's
+  source to help debug this one.
+
+### Confirmed identical (no shape drift)
+
+`/library/sections`, `/library/recentlyAdded` (+ section variant),
+`/library/onDeck`, `/library/metadata/{rk}` family
+(`/children`, `/related`, `/similar`, `/matches`, `/match`,
+`/unmatch`, `/split`, `/merge`), `/library/sections/{id}/all` (with
+`X-Plex-Container-Start`/`Size` headers), `/status/sessions`,
+`/status/sessions/history/all`, `/:/scrobble`, `/:/unscrobble`,
+`/identity`, `/hubs`, `/hubs/sections/{id}`, and the full `/playlists`
+family.
+
+### Endpoints pkkid has that we deferred — confirmed worth shipping
+
+The "Endpoints we haven't built yet" entries marked **✓ pkkid**
+above are no longer speculative — pkkid's source documents the
+exact call shape. If we ship them, the canonical example lives in
+the corresponding pkkid mixin / class file
+(`mixins/rating.py`, `mixins/played_unplayed.py`, `base.py` for
+timeline/progress, `video.py` for `removeFromContinueWatching`,
+`library.py` for the section variants, `server.py` for hub-search).
