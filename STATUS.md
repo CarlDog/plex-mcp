@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-13
+**Last updated:** 2026-05-13 (v0.6 ship later same day)
 
 ## Phase
 
@@ -110,43 +110,61 @@ downloader-mcp.
   filenames as titles because they were bound to the `agents.none`
   agent — files on disk were correctly named with `{imdb-tt...}` IDs,
   but Plex never re-matched.
+- **v0.6 shipped: 3 new admin tools + 1 existing-tool enhancement
+  (24 → 27 total).** All four highest-priority items from the
+  2026-05-08 audit's v0.6 wishlist.
+  - `plex_edit_metadata` (PUT `/library/metadata/{key}` with
+    `<field>.value=` + `<field>.locked=`) — scalar field overrides
+    for `title`, `title_sort`, `summary`, `year`,
+    `originally_available_at`, `content_rating`, `studio`, `tagline`.
+    `lock=true` is the default; without it any refresh wipes the
+    override. snake_case ↔ camelCase translation handled in the
+    tool layer. Unblocks the audit's outstanding MitB 2025 (rk
+    207133) and Backlash Tampa (rk 208543) title fixes.
+  - `plex_unmatch` (PUT `/library/metadata/{key}/unmatch`) — detach
+    item from agent binding back to `agents.none`. Recovery flow is
+    the same as fixing any agents.none item. Locked field values
+    survive across unmatch.
+  - `plex_refresh_section` (GET `/library/sections/{id}/refresh`,
+    optional `force=1`) — section-level rescan, async on the
+    server. Complements per-item `plex_refresh_metadata` for bulk
+    filesystem reorgs.
+  - `plex_browse` gains an optional `fields: string[]` parameter.
+    Client-side projection — Plex still sends the full payload but
+    each item is filtered to just the listed keys before returning.
+    For audits: `fields=['ratingKey','title','year', ...]` shrinks
+    responses ~20× (under 200 bytes/item vs. ~4KB) so populated
+    sections don't blow the LLM output token cap.
+  - Tests: 31 → 36. Round-trip tests for editMetadata (summary
+    capture + restore) and unmatch (capture GUID + title, unmatch,
+    restore via applyMatch). refresh_section is a single
+    incremental call without `force=1` (deep refresh is expensive
+    against live Plex). fields projection asserts only requested
+    keys appear in each item.
 
 ## Next
 
-- **v0.6 scope (prioritized by audit-surfaced demand 2026-05-08).**
-  In order of urgency:
-  1. `plex_edit_metadata(ratingKey, fields={title?, titleSort?, …})` —
-     `PUT /library/metadata/{key}?<field>.value=…&<field>.locked=1`.
-     The `.locked=1` part is critical; without it a refresh wipes the
-     override. Need: visual title fixes where the upstream TMDB
-     title is technically right but awkward (year-doubling,
-     missing-colon naming, etc.).
-  2. `plex_unmatch(ratingKey)` — `PUT /library/metadata/{key}/unmatch`.
-     Useful for forcing a clean re-match cycle or recovering from a
-     bad `apply_match`.
-  3. `plex_refresh_section(sectionId, force?)` —
-     `GET /library/sections/{id}/refresh[?force=1]`. v0.5 only exposes
-     per-item refresh; section-level rescan is needed after bulk
-     filesystem changes.
-  4. Sparse-projection `fields=` parameter on `plex_browse`. Every
-     `plex_browse` against a populated section blew the output token
-     cap during the audit and dumped to disk. Returning just
-     `ratingKey,title,year,type` would shrink responses ~20×.
-  5. (Speculative) `plex_split_item(ratingKey, mediaIds[])` for cases
-     where Plex auto-grouped two legitimately-separate events under
-     one item. Needs investigation against the web app's "Split
-     Apart" call before committing to a tool shape.
-- **Outstanding audit items needing v0.6 tools.**
-  - WWE PPV `Money in the Bank 2025` (rk 207133) and
-    `Backlash Tampa` (rk 208543) — title overrides blocked on tool #1
-    above.
-  - WWE PPV `SummerSlam 2025 Night 2` (rk 207172) — 11 files spanning
-    both Saturday and Sunday were auto-grouped into one item; needs
-    tool #5 or a filesystem-rename workaround.
-  - WWE PPV `Royal Rumble 2026` triple-item (rk 206822 / 207232 /
-    207233) — 207232 already re-matched to the canonical GUID;
-    207233 was hook-blocked from a same-GUID re-match even after a
-    preceding `plex_get_matches` confirmed the candidate.
+- **v0.7 candidate: `plex_split_item`.** Audit's speculative #5 from
+  the v0.6 wishlist. Need: WWE PPV `SummerSlam 2025 Night 2` (rk
+  207172) — 11 files spanning Saturday AND Sunday were
+  auto-grouped into one item; only the Plex web UI's "Split Apart"
+  can separate them today. Endpoint shape unknown — python-plexapi
+  may have `splitItem()` but the HTTP call needs to be verified via
+  DevTools against `app.plex.tv` before committing to a tool. Until
+  then, the filesystem-rename workaround (rename Saturday files to
+  disrupt grouping, let Plex create a new item on rescan) is the
+  fallback.
+- **Outstanding audit items now unblocked by v0.6 (no code work).**
+  Need only an operator action; v0.6 tools cover them.
+  - WWE PPV `Money in the Bank 2025` (rk 207133) — apply
+    `plex_edit_metadata(rating_key=207133, fields={title:"WWE Money
+    in the Bank 2025"})` to strip the redundant year appendage.
+  - WWE PPV `Backlash Tampa` (rk 208543) — apply
+    `plex_edit_metadata(rating_key=208543, fields={title:"WWE
+    Backlash: Tampa"})` to restore the colon.
+  - WWE PPV `Royal Rumble 2026` (rk 207233) — still hook-blocked
+    from re-match. Hook tuning lives outside this repo (see
+    cross-repo dependencies).
 - **Music section audit not yet done.** Audit (§2.3) found `[no
   artist]` and `[unknown]` placeholder buckets and a possible
   `John Williams` artist split (case-insensitive collision).
