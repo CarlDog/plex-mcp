@@ -30,6 +30,9 @@ your Plex libraries.
 | `plex_section_hubs` | Curated hubs scoped to one library section |
 | `plex_related` | Plex's curated "related" hubs for an item (provenance-grouped) |
 | `plex_similar` | Algorithmic similar items for an item (flat list) |
+| `plex_refresh_metadata` | Re-pull metadata for an item from its current agent (optional `force`) |
+| `plex_get_matches` | List candidate matches for an item (TMDB / TVDB / etc.); optional title/year/agent/language overrides |
+| `plex_apply_match` | Apply a chosen match (`guid`/`name`) to an item; overwrites the agent binding |
 
 ## Configuration
 
