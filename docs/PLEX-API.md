@@ -168,6 +168,8 @@ user explicitly asks otherwise. The Plex API doesn't expose a
 | `plex_edit_metadata`   | `PUT /library/metadata/{key}?<field>.value=&<field>.locked=`          | Empty 200 — scalar fields only; `.locked=1` essential or refresh wipes |
 | `plex_unmatch`         | `PUT /library/metadata/{key}/unmatch`                                 | Empty 200 — drops agent binding to `agents.none`; locked fields survive |
 | `plex_refresh_section` | `GET /library/sections/{id}/refresh[?force=1]`                        | Empty 200 — async on server; `force=1` deep-rescans every item        |
+| `plex_split_item`      | `PUT /library/metadata/{key}/split`                                   | Empty 200 — all-or-nothing; splits into N items per Media variant     |
+| `plex_merge_items`     | `PUT /library/metadata/{key}/merge?ids=<csv>`                         | Empty 200 — sources absorbed into target; target's rk/GUID survive    |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.

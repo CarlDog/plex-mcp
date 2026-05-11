@@ -203,4 +203,54 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
       return asText({ refreshed_section: section_id, force: !!force });
     }),
   );
+
+  server.registerTool(
+    "plex_split_item",
+    {
+      title: "Split Plex Item",
+      description:
+        "Split a Plex item back into its constituent media variants as N separate items. Use when Plex auto-grouped legitimately-separate releases into one ratingKey (e.g. two distinct events sharing a similar title were merged). All-or-nothing — there is no media-level granularity. The original ratingKey is consumed; N new ratingKeys are created. Reverse via plex_merge_items if the split was wrong. Mutating; confirm intent before calling.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the item to split apart"),
+      },
+    },
+    withLogging("plex_split_item", async ({ rating_key }) => {
+      await plex.splitItem(rating_key);
+      return asText({ split: rating_key });
+    }),
+  );
+
+  server.registerTool(
+    "plex_merge_items",
+    {
+      title: "Merge Plex Items",
+      description:
+        "Merge other Plex items INTO a target item. The target ratingKey, GUID, and metadata survive; sources are absorbed (their ratingKeys disappear, their Media variants become Media variants of the target). Use to clean up duplicates from differently-named release directories. Reverse via plex_split_item if the merge was wrong (but the resulting split items will have new ratingKeys, not the originals). Mutating; confirm intent before calling.",
+      inputSchema: {
+        into_rating_key: z
+          .string()
+          .describe(
+            "The Plex rating key of the target item (the one that survives the merge).",
+          ),
+        source_rating_keys: z
+          .array(z.string())
+          .min(1)
+          .describe(
+            "List of source ratingKeys to absorb into the target. Each will disappear after the merge.",
+          ),
+      },
+    },
+    withLogging(
+      "plex_merge_items",
+      async ({ into_rating_key, source_rating_keys }) => {
+        await plex.mergeItems(into_rating_key, source_rating_keys);
+        return asText({
+          merged_into: into_rating_key,
+          sources: source_rating_keys,
+        });
+      },
+    ),
+  );
 }

@@ -533,4 +533,62 @@ export class PlexClient {
       params,
     );
   }
+
+  /**
+   * Split a Plex item back into its constituent media variants as N
+   * separate items. All-or-nothing — there's no `mediaIds[]` granularity
+   * on Plex's API; whatever Media variants the item currently has
+   * become separate items.
+   *
+   * Use case: Plex auto-grouped legitimately-separate releases into
+   * one item (e.g. the audit's WWE SummerSlam Night 2 case where 11
+   * files spanning two nights were collapsed into a single ratingKey).
+   *
+   * Reversible via `mergeItems(thisRatingKey, [splitOffRatingKeys])`
+   * — but discovering the new ratingKeys after split requires
+   * browsing the section. Empty 200 response.
+   *
+   * Not covered by an automated round-trip test: destructive, and
+   * post-split rk discovery is fiddly. Verify manually against real
+   * use cases.
+   */
+  async splitItem(ratingKey: string): Promise<void> {
+    await this.requestNoContent(
+      `/library/metadata/${ratingKey}/split`,
+      {},
+      "PUT",
+    );
+  }
+
+  /**
+   * Merge other Plex items INTO the target item. The target's
+   * ratingKey, GUID, and metadata survive; the listed sources are
+   * absorbed (their ratingKeys disappear, their Media variants
+   * become Media variants of the target).
+   *
+   * Use case: clean up duplicates from differently-named release
+   * directories (the audit's WWE Royal Rumble 2026 triplicate at
+   * 206822 / 207232 / 207233). Routing through merge sidesteps the
+   * apply_match hook false-positives that blocked the re-match
+   * approach.
+   *
+   * Reversible via `splitItem(thisRatingKey)` — but the resulting
+   * split items take new ratingKeys (not the originals). Empty 200.
+   *
+   * Not covered by an automated round-trip test: destructive on
+   * shared real Plex. Verify manually against real use cases.
+   */
+  async mergeItems(
+    intoRatingKey: string,
+    sourceRatingKeys: string[],
+  ): Promise<void> {
+    if (sourceRatingKeys.length === 0) {
+      throw new Error("mergeItems: sourceRatingKeys must be non-empty");
+    }
+    await this.requestNoContent(
+      `/library/metadata/${intoRatingKey}/merge`,
+      { ids: sourceRatingKeys.join(",") },
+      "PUT",
+    );
+  }
 }

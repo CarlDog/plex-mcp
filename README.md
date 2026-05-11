@@ -36,6 +36,8 @@ your Plex libraries.
 | `plex_edit_metadata` | Override scalar metadata fields (title, summary, year, etc.) with field-level locking |
 | `plex_unmatch` | Detach an item from its agent binding (back to unmatched state); locked fields survive |
 | `plex_refresh_section` | Trigger a metadata refresh for an entire library section (incremental or deep) |
+| `plex_split_item` | Split a Plex item back into its constituent media variants as N separate items |
+| `plex_merge_items` | Merge other items INTO a target item (sources absorbed; target survives) |
 
 ## Configuration
 
