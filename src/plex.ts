@@ -433,4 +433,42 @@ export class PlexClient {
       "PUT",
     );
   }
+
+  /**
+   * Edit user-settable scalar metadata fields on an item.
+   *
+   * Each provided field is written as `<key>.value=<v>` plus
+   * `<key>.locked=<0|1>`. `lock=true` (default) is critical — without
+   * it, the next metadata refresh from the bound agent wipes the
+   * override. Set `lock=false` only when you want the change to be
+   * transient.
+   *
+   * Keys are passed as Plex camelCase names (`titleSort`,
+   * `originallyAvailableAt`, `contentRating`, etc.) — the tool layer
+   * handles the snake_case translation.
+   *
+   * Empty 200 response. Fields not passed are untouched (existing
+   * lock state preserved).
+   */
+  async editMetadata(
+    ratingKey: string,
+    fields: Record<string, string | number>,
+    lock = true,
+  ): Promise<void> {
+    const params: Record<string, string> = {};
+    const lockFlag = lock ? "1" : "0";
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === undefined) continue;
+      params[`${key}.value`] = String(value);
+      params[`${key}.locked`] = lockFlag;
+    }
+    if (Object.keys(params).length === 0) {
+      throw new Error("editMetadata: at least one field must be provided");
+    }
+    await this.requestNoContent(
+      `/library/metadata/${ratingKey}`,
+      params,
+      "PUT",
+    );
+  }
 }
