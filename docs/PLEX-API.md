@@ -101,6 +101,42 @@ Fix: set `PLEX_URL=http://host.docker.internal:32400` and use the
 `docker-compose.yml`. The compose file already includes the mapping
 by default.
 
+### Items can be bound to `tv.plex.agents.none` (no source) — file renames won't fix the title
+
+An item whose `agent` is `tv.plex.agents.none` (or any `*.agents.none`)
+has no metadata source. Plex displays the raw filename as the title,
+ignores TRaSH-style `{imdb-tt…}` / `{tmdb-…}` IDs, and won't re-match
+on its own — even after a refresh. Locked fields
+(`titleSort.locked=1`, `contentRating.locked=1`, etc.) on such an item
+preserve whatever the user manually edited but don't unstick the
+binding.
+
+The fix is server-side, not filesystem:
+
+1. `plex_get_matches` with `title` + `year` overrides parsed from the
+   filename. Plex's scoring typically puts the right TMDB / TVDB entry
+   first; pick its `guid` + `name`.
+2. `plex_apply_match` with that GUID. This overwrites the binding from
+   `agents.none` to the correct agent.
+3. `plex_refresh_metadata` to pull poster, summary, cast, etc.
+
+Locked field values survive across all three steps. This was the
+root cause for 19 movies surfaced by a library audit (2026-05-08):
+files on disk had perfect TRaSH-style names with embedded IDs, but
+every item was on `agents.none`, so Plex displayed the raw release
+filename as the title.
+
+### Hidden flag has two states; `TESTING` sections are scratch space
+
+`plex_list_libraries` returns sections with a `hidden` field that's
+either `0` (visible), `1` (hidden from "All Libraries" but still
+browseable), or `2` (fully hidden — Plex's "scratch" tier). Sections
+named `* - TESTING` are conventionally `hidden: 2` and exist for the
+user to stage / migrate content; an audit or bulk operation should
+skip them by default and only act on `hidden: 0` sections unless the
+user explicitly asks otherwise. The Plex API doesn't expose a
+`?include_hidden=false` flag — filtering is the agent's job.
+
 ## Endpoints currently used
 
 | Tool                  | Endpoint                                                               | Notes                                                                  |

@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-10
+**Last updated:** 2026-05-13
 
 ## Phase
 
@@ -113,11 +113,59 @@ downloader-mcp.
 
 ## Next
 
-- **v0.6 scope to plan.** Remaining v0.5 candidates that didn't land:
-  smart-playlist support (filter expressions), per-tool args redaction
-  policy if any future tool takes free-text content,
-  `/transcode/sessions` for visibility into active transcoding,
-  section-level refresh/scan, item unmatch.
+- **v0.6 scope (prioritized by audit-surfaced demand 2026-05-08).**
+  In order of urgency:
+  1. `plex_edit_metadata(ratingKey, fields={title?, titleSort?, …})` —
+     `PUT /library/metadata/{key}?<field>.value=…&<field>.locked=1`.
+     The `.locked=1` part is critical; without it a refresh wipes the
+     override. Need: visual title fixes where the upstream TMDB
+     title is technically right but awkward (year-doubling,
+     missing-colon naming, etc.).
+  2. `plex_unmatch(ratingKey)` — `PUT /library/metadata/{key}/unmatch`.
+     Useful for forcing a clean re-match cycle or recovering from a
+     bad `apply_match`.
+  3. `plex_refresh_section(sectionId, force?)` —
+     `GET /library/sections/{id}/refresh[?force=1]`. v0.5 only exposes
+     per-item refresh; section-level rescan is needed after bulk
+     filesystem changes.
+  4. Sparse-projection `fields=` parameter on `plex_browse`. Every
+     `plex_browse` against a populated section blew the output token
+     cap during the audit and dumped to disk. Returning just
+     `ratingKey,title,year,type` would shrink responses ~20×.
+  5. (Speculative) `plex_split_item(ratingKey, mediaIds[])` for cases
+     where Plex auto-grouped two legitimately-separate events under
+     one item. Needs investigation against the web app's "Split
+     Apart" call before committing to a tool shape.
+- **Outstanding audit items needing v0.6 tools.**
+  - WWE PPV `Money in the Bank 2025` (rk 207133) and
+    `Backlash Tampa` (rk 208543) — title overrides blocked on tool #1
+    above.
+  - WWE PPV `SummerSlam 2025 Night 2` (rk 207172) — 11 files spanning
+    both Saturday and Sunday were auto-grouped into one item; needs
+    tool #5 or a filesystem-rename workaround.
+  - WWE PPV `Royal Rumble 2026` triple-item (rk 206822 / 207232 /
+    207233) — 207232 already re-matched to the canonical GUID;
+    207233 was hook-blocked from a same-GUID re-match even after a
+    preceding `plex_get_matches` confirmed the candidate.
+- **Music section audit not yet done.** Audit (§2.3) found `[no
+  artist]` and `[unknown]` placeholder buckets and a possible
+  `John Williams` artist split (case-insensitive collision).
+  Album / track titles weren't enumerated.
+- **Categories not yet audited.** Episode-level titles in any TV /
+  Anime / Kids / Webseries section; albums / tracks under Music;
+  the `TESTING` libraries (`hidden: 2`, skipped by judgment);
+  orphan files on disk vs. Plex catalog; library type-mismatch
+  detection.
+- **External dependencies on other repos.**
+  - `servarr-mcp` needs `radarr_delete_movie` (and
+    `sonarr_delete_series`). The WWE PPV cleanup had to bypass
+    Radarr through filesystem MCP; Radarr's catalog drifted from
+    disk. Pattern recurs whenever removal-as-workflow comes up.
+  - `plex-mcp` permission-hook needs a `get_matches → apply_match`
+    correlation heuristic: an `apply_match(ratingKey=X, guid=G)`
+    preceded within N tool calls by a `get_matches(ratingKey=X)`
+    that returned `{guid: G}` should pass without a prompt. Two
+    false-positive denials documented during the audit cleanup.
 - **CI integration tests are skipped by default.** Personal repo;
   if anyone wants CI to actually exercise the suite, they wire up
   their own Plex endpoint as GHA secrets. Decided not to do this
