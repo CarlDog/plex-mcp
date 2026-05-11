@@ -1,6 +1,6 @@
 # Status
 
-**Last updated:** 2026-05-13 (v0.6 ship later same day)
+**Last updated:** 2026-05-13 (v0.6 ship + v0.7 split/merge + pkkid cross-validation)
 
 ## Phase
 
@@ -144,27 +144,42 @@ downloader-mcp.
 
 ## Next
 
-- **v0.7 candidate: `plex_split_item`.** Audit's speculative #5 from
-  the v0.6 wishlist. Need: WWE PPV `SummerSlam 2025 Night 2` (rk
-  207172) — 11 files spanning Saturday AND Sunday were
-  auto-grouped into one item; only the Plex web UI's "Split Apart"
-  can separate them today. Endpoint shape unknown — python-plexapi
-  may have `splitItem()` but the HTTP call needs to be verified via
-  DevTools against `app.plex.tv` before committing to a tool. Until
-  then, the filesystem-rename workaround (rename Saturday files to
-  disrupt grouping, let Plex create a new item on rescan) is the
-  fallback.
-- **Outstanding audit items now unblocked by v0.6 (no code work).**
-  Need only an operator action; v0.6 tools cover them.
-  - WWE PPV `Money in the Bank 2025` (rk 207133) — apply
-    `plex_edit_metadata(rating_key=207133, fields={title:"WWE Money
-    in the Bank 2025"})` to strip the redundant year appendage.
-  - WWE PPV `Backlash Tampa` (rk 208543) — apply
-    `plex_edit_metadata(rating_key=208543, fields={title:"WWE
-    Backlash: Tampa"})` to restore the colon.
-  - WWE PPV `Royal Rumble 2026` (rk 207233) — still hook-blocked
-    from re-match. Hook tuning lives outside this repo (see
-    cross-repo dependencies).
+- **v0.7 in flight (2026-05-13).**
+  - **Shipped:** `plex_split_item` + `plex_merge_items` (commit
+    `27f6d13`). Endpoints `PUT /library/metadata/{key}/split` and
+    `PUT /library/metadata/{key}/merge?ids=<csv>`, both confirmed
+    against `python-plexapi`'s `split_merge.py` mixin and live-probed.
+    The audit's speculation that "Plex has no item-split primitive"
+    was wrong — `split` is exactly what the web UI's "Split Apart"
+    calls.
+  - **Pending shipped-related operator actions:**
+    - WWE SummerSlam 2025 Night 2 (rk 207172) — now solvable via
+      `plex_split_item` to break the 11-file mis-grouping into
+      separate items, then `plex_apply_match` on each.
+    - WWE Royal Rumble 2026 triplicate (rk 206822 + 207232 +
+      207233) — now solvable via `plex_merge_items(206822,
+      [207232, 207233])`. Sidesteps the hook false-positive
+      entirely (no `apply_match` involved).
+  - **v0.7 additional candidates** (cross-validation 2026-05-13 against
+    python-plexapi confirmed these endpoint shapes — see
+    `docs/PLEX-API.md` cross-validation section):
+    1. `plex_rate_item(rating_key, rating)` — `PUT /:/rate?...` —
+       0–10 scale to 0–5 stars. pkkid `mixins/rating.py`.
+    2. `plex_remove_from_continue_watching(rating_key)` —
+       `PUT /actions/removeFromContinueWatching?ratingKey=` —
+       cleans up the Continue Watching hub. pkkid `video.py`.
+    3. `plex_update_timeline(rating_key, time_ms, state, duration_ms?)` —
+       `GET /:/timeline?...` — set playback resume position. Was
+       deferred in v0.4 as "low value vs scrobble"; pkkid
+       confirms shape now. Reconsider whether to ship.
+    4. `plex_empty_section_trash(section_id)` — `PUT /library/sections/{id}/emptyTrash`
+       — post-cleanup helper for bulk filesystem ops.
+    5. Section-scoped `plex_on_deck(section_id?)` — extend the
+       existing tool with optional `section_id` arg
+       (`GET /library/sections/{id}/onDeck`).
+- **Outstanding audit items now closed by v0.6 + v0.7.** All four of
+  the originally-blocked WWE PPV items have a resolution path
+  using shipped tools. Pending only operator actions.
 - **Music section audit not yet done.** Audit (§2.3) found `[no
   artist]` and `[unknown]` placeholder buckets and a possible
   `John Williams` artist split (case-insensitive collision).
