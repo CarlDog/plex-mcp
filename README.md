@@ -14,7 +14,7 @@ your Plex libraries.
 | `plex_recently_added` | Recently added items, optionally per-section |
 | `plex_on_deck` | Items "on deck" (partially watched / next up) |
 | `plex_get_item` | Full metadata for one item by rating key |
-| `plex_browse` | List items in a library section (paged, optional type filter) |
+| `plex_browse` | List items in a library section (paged, optional type filter, optional sparse `fields` projection) |
 | `plex_get_children` | Children of an item (show→seasons, season→episodes, artist→albums) |
 | `plex_now_playing` | Currently-playing sessions on the server |
 | `plex_history` | Playback history entries (paged, most recent first) |

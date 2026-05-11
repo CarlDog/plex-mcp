@@ -147,7 +147,7 @@ user explicitly asks otherwise. The Plex API doesn't expose a
 | `plex_on_deck`        | `GET /library/onDeck`                                                  |                                                                        |
 | `plex_get_item`       | `GET /library/metadata/{rating_key}`                                   | Returns first `Metadata[]` entry                                       |
 | `plex_get_children`   | `GET /library/metadata/{rating_key}/children`                          | Show→seasons, season→episodes, artist→albums, album→tracks             |
-| `plex_browse`         | `GET /library/sections/{id}/all`                                       | Paged via `X-Plex-Container-Start/Size` headers; optional `type=N`     |
+| `plex_browse`         | `GET /library/sections/{id}/all`                                       | Paged via `X-Plex-Container-Start/Size` headers; optional `type=N`; `fields[]` is a client-side projection (Plex still sends full payload, we filter before returning) |
 | `plex_now_playing`    | `GET /status/sessions`                                                 | Empty array when nothing playing                                       |
 | `plex_history`        | `GET /status/sessions/history/all`                                     | Paged; `sort=viewedAt:desc`; optional `librarySectionID`               |
 | `plex_mark_watched`   | `GET /:/scrobble?key=...&identifier=com.plexapp.plugins.library`       | Empty 200 — use `requestNoContent`                                     |
