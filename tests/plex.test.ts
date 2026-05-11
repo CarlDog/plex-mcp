@@ -358,6 +358,15 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     });
   });
 
+  it("refreshSection succeeds on a known section (incremental)", async () => {
+    // Doesn't pass force=true — that would kick off a deep rescan of
+    // every item in the section, which is expensive against a real
+    // server. The incremental refresh is essentially free.
+    await client.refreshSection(fixtures.showSectionId);
+    // No assertion on side-effects; the refresh is async on the server.
+    // Success = no exception.
+  });
+
   // SIDE EFFECT: this round trip briefly puts the fixture into the
   // unmatched (agents.none) state before restoring its original
   // match. If the test fails between unmatch and applyMatch, the
