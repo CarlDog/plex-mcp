@@ -471,4 +471,23 @@ export class PlexClient {
       "PUT",
     );
   }
+
+  /**
+   * Detach an item from its current agent binding, putting it back
+   * into the unmatched (`tv.plex.agents.none`) state. Empty 200.
+   *
+   * Recovery flow after an unmatch is the same as fixing any
+   * agents.none item: plex_get_matches → plex_apply_match →
+   * plex_refresh_metadata.
+   *
+   * Locked field values survive across unmatch (verified empirically
+   * during the 2026-05-08 audit cleanup).
+   */
+  async unmatch(ratingKey: string): Promise<void> {
+    await this.requestNoContent(
+      `/library/metadata/${ratingKey}/unmatch`,
+      {},
+      "PUT",
+    );
+  }
 }

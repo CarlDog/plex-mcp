@@ -166,6 +166,7 @@ user explicitly asks otherwise. The Plex API doesn't expose a
 | `plex_get_matches`     | `GET /library/metadata/{key}/matches?manual=1[&agent=&language=&title=&year=]` | Returns `MediaContainer.SearchResult[]` candidates              |
 | `plex_apply_match`     | `PUT /library/metadata/{key}/match?guid=&name=`                       | Empty 200 — overwrites current agent binding                           |
 | `plex_edit_metadata`   | `PUT /library/metadata/{key}?<field>.value=&<field>.locked=`          | Empty 200 — scalar fields only; `.locked=1` essential or refresh wipes |
+| `plex_unmatch`         | `PUT /library/metadata/{key}/unmatch`                                 | Empty 200 — drops agent binding to `agents.none`; locked fields survive |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.

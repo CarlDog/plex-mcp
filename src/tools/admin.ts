@@ -159,4 +159,22 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
       },
     ),
   );
+
+  server.registerTool(
+    "plex_unmatch",
+    {
+      title: "Unmatch Plex Item",
+      description:
+        "Detach an item from its current agent binding, returning it to the unmatched `tv.plex.agents.none` state. After this the item will display its raw filename as the title until you re-bind it. Recovery flow: plex_get_matches → plex_apply_match → plex_refresh_metadata. Locked field values survive across unmatch. Mutating; reversed by applying a fresh match.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe("The Plex rating key of the item to unmatch"),
+      },
+    },
+    withLogging("plex_unmatch", async ({ rating_key }) => {
+      await plex.unmatch(rating_key);
+      return asText({ unmatched: rating_key });
+    }),
+  );
 }

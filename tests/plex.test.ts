@@ -358,6 +358,75 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     });
   });
 
+  // SIDE EFFECT: this round trip briefly puts the fixture into the
+  // unmatched (agents.none) state before restoring its original
+  // match. If the test fails between unmatch and applyMatch, the
+  // fixture is left unmatched — afterAll attempts a best-effort
+  // restore. Skipped when the fixture starts on agents.none / a
+  // local-only GUID (nothing to restore to).
+  describe.sequential("unmatch round trip", () => {
+    let originalGuid: string | undefined;
+    let originalTitle: string | undefined;
+    let originalAgent: string | undefined;
+
+    beforeAll(async () => {
+      const item = (await client.getItem(fixtures.showRatingKey)) as {
+        guid?: string;
+        title?: string;
+        librarySectionAgent?: string;
+      };
+      originalGuid = item.guid;
+      originalTitle = item.title;
+      originalAgent = item.librarySectionAgent;
+    });
+
+    afterAll(async () => {
+      if (!originalGuid || !originalTitle) return;
+      if (originalGuid.startsWith("local://")) return;
+      try {
+        await client.applyMatch(
+          fixtures.showRatingKey,
+          originalGuid,
+          originalTitle,
+        );
+      } catch {
+        // best-effort; not worth failing afterAll
+      }
+    });
+
+    it("unmatch followed by applyMatch restores the original binding", async () => {
+      if (
+        !originalGuid ||
+        !originalTitle ||
+        originalGuid.startsWith("local://") ||
+        originalAgent?.endsWith(".agents.none")
+      ) {
+        console.warn(
+          "[skip] fixture is unmatched or local-only; unmatch round-trip not exercised",
+        );
+        return;
+      }
+
+      await client.unmatch(fixtures.showRatingKey);
+      const afterUnmatch = (await client.getItem(
+        fixtures.showRatingKey,
+      )) as { guid?: string };
+      // After unmatch, the agent-derived GUID should be gone or
+      // replaced with a local:// placeholder.
+      expect(afterUnmatch.guid !== originalGuid).toBe(true);
+
+      await client.applyMatch(
+        fixtures.showRatingKey,
+        originalGuid,
+        originalTitle,
+      );
+      const afterRestore = (await client.getItem(
+        fixtures.showRatingKey,
+      )) as { guid?: string };
+      expect(afterRestore.guid).toBe(originalGuid);
+    });
+  });
+
   // SIDE EFFECT: this round trip leaves the fixture show's `summary`
   // field at `locked=1` (whether or not it was locked before). Same
   // class of side effect as the scrobble timestamp bump in the
