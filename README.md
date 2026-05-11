@@ -34,6 +34,7 @@ your Plex libraries.
 | `plex_get_matches` | List candidate matches for an item (TMDB / TVDB / etc.); optional title/year/agent/language overrides |
 | `plex_apply_match` | Apply a chosen match (`guid`/`name`) to an item; overwrites the agent binding |
 | `plex_edit_metadata` | Override scalar metadata fields (title, summary, year, etc.) with field-level locking |
+| `plex_unmatch` | Detach an item from its agent binding (back to unmatched state); locked fields survive |
 
 ## Configuration
 
