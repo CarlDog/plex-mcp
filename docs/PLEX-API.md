@@ -126,6 +126,39 @@ files on disk had perfect TRaSH-style names with embedded IDs, but
 every item was on `agents.none`, so Plex displayed the raw release
 filename as the title.
 
+### Auto-merge: `apply_match` triggers it, `split` doesn't
+
+When you call `plex_apply_match` and the new GUID matches an
+existing item's GUID, Plex consolidates the two items on its next
+rescan — the secondary ratingKey disappears (404), its Media
+variants become Media variants of the surviving item. Observed
+twice:
+
+1. WWE Royal Rumble 2026 audit cleanup: rk 207232 was re-matched
+   to the canonical GUID; Plex auto-removed it on rescan, leaving
+   only 206822.
+2. WWE SummerSlam 2025 Night 1 cleanup (2026-05-13 evening): six
+   Saturday-file ratingKeys created by `plex_split_item` were all
+   re-bound to the Night 1 GUID via `apply_match`. Plex auto-merged
+   them 6 → 1 (rk 208829 survived) on rescan.
+
+**`plex_split_item`, by contrast, does NOT trigger this auto-merge.**
+The N items it creates all share the source's original GUID, but
+they remain separate. To consolidate them you have to call
+`plex_merge_items` explicitly. Verified empirically: after
+splitting WWE SummerSlam Night 2 (rk 207172) into 11 items, the 5
+that retained the Night 2 GUID stayed separate until I called
+`plex_merge_items(207172, [208828, 208833, 208834, 208836])`.
+
+Recipe for safely re-grouping a split-then-re-matched item:
+
+1. `plex_split_item(rk)` → N new items, all on the source's GUID.
+2. For items needing a different binding, `plex_apply_match` to the
+   correct GUID — Plex auto-merges items sharing the new GUID into
+   the first one bound to that GUID.
+3. For items that should keep the original GUID (e.g. correctly-bound
+   variants), `plex_merge_items` explicitly to consolidate.
+
 ### Hidden flag has two states; `TESTING` sections are scratch space
 
 `plex_list_libraries` returns sections with a `hidden` field that's
