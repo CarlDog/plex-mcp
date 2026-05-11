@@ -317,7 +317,12 @@ export class PlexClient {
 
   async browse(
     sectionId: string,
-    options: { offset?: number; limit?: number; type?: number } = {},
+    options: {
+      offset?: number;
+      limit?: number;
+      type?: number;
+      fields?: string[];
+    } = {},
   ): Promise<{
     total: number;
     offset: number;
@@ -340,7 +345,24 @@ export class PlexClient {
       Metadata?: unknown[];
       totalSize?: number;
     }>(`/library/sections/${sectionId}/all`, params, headers);
-    const items = data.MediaContainer?.Metadata ?? [];
+    let items: unknown[] = data.MediaContainer?.Metadata ?? [];
+    // Sparse projection: if `fields` is provided, filter each item's
+    // keys to just those listed. Reduces response size ~20× on
+    // populated sections where the default per-item payload (~4KB
+    // including summary/images/colors/genres/etc.) overwhelms an
+    // LLM context. Done client-side because Plex's API has no
+    // projection parameter — server still sends the full payload,
+    // but the agent never sees the rest.
+    if (options.fields && options.fields.length > 0) {
+      const keys = options.fields;
+      items = (items as Array<Record<string, unknown>>).map((item) => {
+        const projected: Record<string, unknown> = {};
+        for (const key of keys) {
+          if (key in item) projected[key] = item[key];
+        }
+        return projected;
+      });
+    }
     return {
       total: data.MediaContainer?.totalSize ?? items.length,
       offset,

@@ -111,7 +111,7 @@ export function registerDiscoveryTools(
     {
       title: "Browse Plex Library",
       description:
-        "List items in a specific library section, paged. Use plex_list_libraries first to get section IDs. Returns { total, offset, size, items } so the assistant can page through large libraries.",
+        "List items in a specific library section, paged. Use plex_list_libraries first to get section IDs. Returns { total, offset, size, items } so the assistant can page through large libraries.\n\nPass `fields` for a sparse projection — each item is filtered to just those keys. Recommended for audits and any task that doesn't need the full ~4KB-per-item payload (`ratingKey`, `title`, `year`, `originallyAvailableAt`, `type`, `childCount`, `leafCount` is usually enough and shrinks responses ~20×).",
       inputSchema: {
         section_id: z
           .string()
@@ -141,16 +141,25 @@ export function registerDiscoveryTools(
           ])
           .optional()
           .describe("Filter to a specific item type"),
+        fields: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "If provided, each returned item is projected to just these keys. For audits, ['ratingKey','title','year','type'] is usually enough.",
+          ),
       },
     },
-    withLogging("plex_browse", async ({ section_id, offset, limit, type }) =>
-      asText(
-        await plex.browse(section_id, {
-          offset,
-          limit,
-          type: type ? PLEX_TYPE_CODES[type] : undefined,
-        }),
-      ),
+    withLogging(
+      "plex_browse",
+      async ({ section_id, offset, limit, type, fields }) =>
+        asText(
+          await plex.browse(section_id, {
+            offset,
+            limit,
+            type: type ? PLEX_TYPE_CODES[type] : undefined,
+            fields,
+          }),
+        ),
     ),
   );
 

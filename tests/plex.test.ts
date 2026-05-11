@@ -186,6 +186,24 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       expect(p1First).not.toBe(p2First);
     });
 
+    it("fields projection limits each item to just the requested keys", async () => {
+      const fields = ["ratingKey", "title", "year"];
+      const result = await client.browse(fixtures.showSectionId, {
+        type: 2,
+        limit: 3,
+        fields,
+      });
+      expect(result.items.length).toBe(3);
+      for (const item of result.items as Array<Record<string, unknown>>) {
+        // Every returned key must be in the requested set.
+        for (const key of Object.keys(item)) {
+          expect(fields).toContain(key);
+        }
+        // At least ratingKey must be present (every Plex item has it).
+        expect(item.ratingKey).toBeDefined();
+      }
+    });
+
     it("type filter narrows results to the requested type", async () => {
       const showsOnly = await client.browse(fixtures.showSectionId, {
         type: 2,
