@@ -490,4 +490,25 @@ export class PlexClient {
       "PUT",
     );
   }
+
+  /**
+   * Ask Plex to refresh metadata for an entire library section. The
+   * refresh runs asynchronously on the server; the HTTP call returns
+   * immediately. Useful after bulk filesystem changes that the
+   * built-in auto-scan hasn't picked up.
+   *
+   * `force=true` does a deep refresh (re-evaluates every item; slow,
+   * server-load-heavy). Default false runs an incremental scan.
+   */
+  async refreshSection(
+    sectionId: string,
+    options: { force?: boolean } = {},
+  ): Promise<void> {
+    const params: Record<string, string> = {};
+    if (options.force) params.force = "1";
+    await this.requestNoContent(
+      `/library/sections/${sectionId}/refresh`,
+      params,
+    );
+  }
 }

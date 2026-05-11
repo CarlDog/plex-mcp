@@ -167,6 +167,7 @@ user explicitly asks otherwise. The Plex API doesn't expose a
 | `plex_apply_match`     | `PUT /library/metadata/{key}/match?guid=&name=`                       | Empty 200 — overwrites current agent binding                           |
 | `plex_edit_metadata`   | `PUT /library/metadata/{key}?<field>.value=&<field>.locked=`          | Empty 200 — scalar fields only; `.locked=1` essential or refresh wipes |
 | `plex_unmatch`         | `PUT /library/metadata/{key}/unmatch`                                 | Empty 200 — drops agent binding to `agents.none`; locked fields survive |
+| `plex_refresh_section` | `GET /library/sections/{id}/refresh[?force=1]`                        | Empty 200 — async on server; `force=1` deep-rescans every item        |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.
