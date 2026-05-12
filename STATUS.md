@@ -1,6 +1,13 @@
 # Status
 
-**Last updated:** 2026-05-11 (v0.8 candidates captured from extensive cleanup session)
+**Last updated:** 2026-05-11 (session handoff — v0.8 candidate slate
+finalized: sparse fields on plex_get_item, poster/image management,
+plus cross-MCP token-economy work. Infrastructure-side work this
+session — extra_hosts sweep across 13 stacks, filesystem-mcp expanded
+to a second root for portainer-compose access, downloader-mcp URLs
+fixed — is captured in OC memory under tags
+`convention/infrastructure` and `reference/filesystem-mcp` rather
+than here, since it's environment-wide rather than plex-mcp-specific.)
 
 ## Phase
 
