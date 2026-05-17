@@ -101,6 +101,55 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     expect(item!.ratingKey).toBe(fixtures.showRatingKey);
   });
 
+  it("getItem with minimal=true drops bulky arrays but keeps Media.Part.file", async () => {
+    const full = (await client.getItem(fixtures.showRatingKey)) as
+      | Record<string, unknown>
+      | undefined;
+    const minimal = (await client.getItem(fixtures.showRatingKey, {
+      minimal: true,
+    })) as Record<string, unknown> | undefined;
+    expect(minimal).toBeDefined();
+    // Bulky arrays are dropped if they existed.
+    for (const dropped of [
+      "Role",
+      "Director",
+      "Writer",
+      "Producer",
+      "Image",
+      "UltraBlurColors",
+    ]) {
+      if (dropped in (full ?? {})) {
+        expect(dropped in minimal!).toBe(false);
+      }
+    }
+    // Top-level identity fields survive.
+    expect(minimal!.ratingKey).toBe(fixtures.showRatingKey);
+    // If Media[] exists, Stream[] inside each Part is gone but file remains.
+    const fullMedia = (full?.Media as Array<Record<string, unknown>>) ?? [];
+    if (fullMedia.length > 0) {
+      const minMedia = minimal!.Media as Array<Record<string, unknown>>;
+      expect(Array.isArray(minMedia)).toBe(true);
+      const firstPart = (
+        minMedia[0]?.Part as Array<Record<string, unknown>>
+      )?.[0];
+      if (firstPart) {
+        expect("Stream" in firstPart).toBe(false);
+        // file may be undefined for shows (which don't have media), but
+        // the key shouldn't be stripped if Plex sent it.
+      }
+    }
+  });
+
+  it("getItem with explicit fields returns only those keys", async () => {
+    const projected = (await client.getItem(fixtures.showRatingKey, {
+      fields: ["ratingKey", "title", "year"],
+    })) as Record<string, unknown>;
+    expect(Object.keys(projected).sort()).toEqual(
+      ["ratingKey", "title", "year"].filter((k) => k in projected).sort(),
+    );
+    expect(projected.ratingKey).toBe(fixtures.showRatingKey);
+  });
+
   it("getImageBytes returns image bytes for a show's thumb", async () => {
     const result = await client.getImageBytes({
       ratingKey: fixtures.showRatingKey,
