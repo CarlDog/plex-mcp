@@ -9,7 +9,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText, withLogging } from "./helpers.js";
+import {
+  DESTRUCTIVE_ANNOTATIONS,
+  READ_ONLY_ANNOTATIONS,
+  SAFE_WRITE_ANNOTATIONS,
+  asText,
+  withLogging,
+} from "./helpers.js";
 
 export function registerPlaylistsTools(
   server: McpServer,
@@ -22,6 +28,7 @@ export function registerPlaylistsTools(
       description:
         "List all playlists on the Plex server. Each entry includes a `smart` field; smart playlists are filter-based and auto-updating, regular playlists are explicit lists. The mutation tools (add/remove/delete) only support regular playlists.",
       inputSchema: {},
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_list_playlists", async () =>
       asText(await plex.listPlaylists()),
@@ -37,6 +44,7 @@ export function registerPlaylistsTools(
       inputSchema: {
         playlist_id: z.string().describe("Playlist ratingKey"),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_get_playlist_items", async ({ playlist_id }) =>
       asText(await plex.getPlaylistItems(playlist_id)),
@@ -58,6 +66,7 @@ export function registerPlaylistsTools(
           .string()
           .describe("ratingKey of the seed item (must match `type`)"),
       },
+      annotations: SAFE_WRITE_ANNOTATIONS,
     },
     withLogging("plex_create_playlist", async ({ title, type, rating_key }) =>
       asText(
@@ -80,6 +89,7 @@ export function registerPlaylistsTools(
         playlist_id: z.string().describe("Playlist ratingKey"),
         rating_key: z.string().describe("ratingKey of the item to append"),
       },
+      annotations: SAFE_WRITE_ANNOTATIONS,
     },
     withLogging("plex_add_to_playlist", async ({ playlist_id, rating_key }) => {
       await plex.addToPlaylist(playlist_id, rating_key);
@@ -101,6 +111,7 @@ export function registerPlaylistsTools(
             "playlistItemID from plex_get_playlist_items (NOT ratingKey)",
           ),
       },
+      annotations: SAFE_WRITE_ANNOTATIONS,
     },
     withLogging(
       "plex_remove_from_playlist",
@@ -123,6 +134,7 @@ export function registerPlaylistsTools(
       inputSchema: {
         playlist_id: z.string().describe("Playlist ratingKey to delete"),
       },
+      annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     withLogging("plex_delete_playlist", async ({ playlist_id }) => {
       await plex.deletePlaylist(playlist_id);

@@ -1,14 +1,13 @@
 # Status
 
-**Last updated:** 2026-05-17 (v0.8 second item: sparse projection +
-minimal mode on plex_get_item. New `minimal=true` shorthand drops
-Role/Director/Writer/Producer/Image/UltraBlurColors/Country/Style/
-Mood at the top level plus Stream[] inside each Media.Part, keeping
-Guid[]/Media.Part.file/Field[]/edition titles/viewed state — ~80%
-size reduction on movies with deep casts, the biggest token-economy
-offender per the 2026-05-11 retro. Earlier today: plex_get_image
-shipped + v0.7.0 tagged consolidating split+merge tools + opt-in
-HTTPS + ChatGPT Apps SDK alignment spec.)
+**Last updated:** 2026-05-17 (v0.8 third item: ChatGPT Apps SDK
+Phase 1 — tool annotation hints added across all 30 tools. Each
+registration now carries readOnlyHint / destructiveHint /
+idempotentHint / openWorldHint per the MCP spec + Apps SDK
+metadata guide. Benefits any client (not just ChatGPT) by giving
+the model better tool-selection signal. Earlier today: plex_get_item
+minimal/fields projection + plex_get_image + v0.7.0 tagged
+consolidating split+merge + opt-in HTTPS + ChatGPT alignment spec.)
 
 ## Phase
 
@@ -150,9 +149,38 @@ downloader-mcp.
     against live Plex). fields projection asserts only requested
     keys appear in each item.
 
-- **v0.8 in flight (2026-05-17).** Two items shipped so far. Tool
-  count 29 → 30 (one new tool; the second item enhances an existing
-  tool).
+- **v0.8 in flight (2026-05-17).** Three items shipped so far.
+  Tool count 29 → 30 (one new tool; the second + third items
+  enhance existing tools or all tools collectively).
+  - **ChatGPT Apps SDK Phase 1: tool annotation hints on every
+    tool.** Per the spec at docs/CHATGPT-APPS-SDK.md, each tool's
+    `registerTool` config now carries an `annotations` block with
+    `readOnlyHint` / `destructiveHint` / `idempotentHint` /
+    `openWorldHint` per the MCP `ToolAnnotations` schema. Four
+    canonical shapes defined in `src/tools/helpers.ts`:
+    - `READ_ONLY_ANNOTATIONS` — for the 19 read tools (search,
+      list, get, browse, history, hubs, related, similar,
+      get_matches, get_image, get_playlist_items, list_playlists,
+      now_playing, recently_added, on_deck, get_item,
+      get_children, hubs/section_hubs).
+    - `SAFE_WRITE_ANNOTATIONS` — mutating but non-destructive,
+      not idempotent: mark_watched, mark_unwatched (scrobble
+      bumps lastViewedAt each call), create_playlist,
+      add_to_playlist, remove_from_playlist, split_item,
+      merge_items.
+    - `SAFE_IDEMPOTENT_WRITE_ANNOTATIONS` — mutating, idempotent
+      (re-running has same effect): refresh_metadata, apply_match,
+      edit_metadata, unmatch, refresh_section.
+    - `DESTRUCTIVE_ANNOTATIONS` — genuine destruction:
+      delete_playlist (only true destruction in the toolset; the
+      playlist disappears, though the underlying media is
+      untouched).
+    `openWorldHint: false` on every tool — all operations touch
+    only the user's own Plex server. No tool descriptions changed
+    in this pass; description-style polish ("Use this when…") is
+    a separate scope.
+
+
   - **`plex_get_item` sparse projection + minimal mode.** The
     biggest token-economy offender per the 2026-05-11 retro (full
     responses were 80–100 KB on movies with deep casts; Role[]

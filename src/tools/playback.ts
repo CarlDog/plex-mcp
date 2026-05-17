@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText, withLogging } from "./helpers.js";
+import { SAFE_WRITE_ANNOTATIONS, asText, withLogging } from "./helpers.js";
 
 export function registerPlaybackTools(
   server: McpServer,
@@ -22,6 +22,7 @@ export function registerPlaybackTools(
           .string()
           .describe("The Plex rating key of the item to mark watched"),
       },
+      annotations: SAFE_WRITE_ANNOTATIONS,
     },
     withLogging("plex_mark_watched", async ({ rating_key }) => {
       await plex.markWatched(rating_key);
@@ -40,6 +41,7 @@ export function registerPlaybackTools(
           .string()
           .describe("The Plex rating key of the item to mark unwatched"),
       },
+      annotations: SAFE_WRITE_ANNOTATIONS,
     },
     withLogging("plex_mark_unwatched", async ({ rating_key }) => {
       await plex.markUnwatched(rating_key);

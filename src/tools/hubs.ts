@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText, withLogging } from "./helpers.js";
+import { READ_ONLY_ANNOTATIONS, asText, withLogging } from "./helpers.js";
 
 export function registerHubsTools(server: McpServer, plex: PlexClient): void {
   server.registerTool(
@@ -15,6 +15,7 @@ export function registerHubsTools(server: McpServer, plex: PlexClient): void {
       description:
         "Get Plex's curated server-wide hubs (Continue Watching, Recently Released, Top Picks, etc.). Each hub has a `title`, `type`, and a list of items. Use plex_section_hubs for per-library hubs.",
       inputSchema: {},
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_hubs", async () => asText(await plex.hubs())),
   );
@@ -30,6 +31,7 @@ export function registerHubsTools(server: McpServer, plex: PlexClient): void {
           .string()
           .describe("Library section ID (from plex_list_libraries)"),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_section_hubs", async ({ section_id }) =>
       asText(await plex.sectionHubs(section_id)),
