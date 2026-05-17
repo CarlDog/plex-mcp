@@ -79,13 +79,26 @@ export function registerDiscoveryTools(
     "plex_get_item",
     {
       title: "Get Plex Item",
-      description: "Get full metadata for a specific item by rating key.",
+      description:
+        "Get metadata for a specific item by rating key. Full-shape responses can exceed 80–100KB on movies with deep casts — Role[] alone is typically 80%+ of the payload. Pass `minimal=true` for a curated lean view (drops Role/Director/Writer/Producer/Image/UltraBlurColors/Country/Style/Mood top-level arrays plus Stream[] inside each Media.Part; keeps Guid[], Media.Part.file, Field[] lock state, edition titles, viewed state). Pass `fields=[...]` for explicit allowlist projection. `fields` wins over `minimal` if both are set.",
       inputSchema: {
         rating_key: z.string().describe("The Plex rating key (item ID)"),
+        minimal: z
+          .boolean()
+          .optional()
+          .describe(
+            "If true, return a curated lean view that drops the bulky cast/crew/image arrays. Recommended for all calls that don't specifically need full cast or per-stream codec detail.",
+          ),
+        fields: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "If provided, the returned item is projected to just these top-level keys. Overrides `minimal`.",
+          ),
       },
     },
-    withLogging("plex_get_item", async ({ rating_key }) =>
-      asText(await plex.getItem(rating_key)),
+    withLogging("plex_get_item", async ({ rating_key, minimal, fields }) =>
+      asText(await plex.getItem(rating_key, { minimal, fields })),
     ),
   );
 

@@ -1,12 +1,14 @@
 # Status
 
-**Last updated:** 2026-05-17 (v0.8 opens — plex_get_image shipped,
-returning artwork bytes as an MCP image content block so vision-
-capable clients can analyze posters/art/banners/logos directly.
-First tool in src/tools/images.ts; PlexClient gained fetchBinary
-and getImageBytes. Tests added against live Plex. Earlier today:
-v0.7.0 tagged consolidating split+merge tools + opt-in HTTPS +
-ChatGPT Apps SDK alignment spec.)
+**Last updated:** 2026-05-17 (v0.8 second item: sparse projection +
+minimal mode on plex_get_item. New `minimal=true` shorthand drops
+Role/Director/Writer/Producer/Image/UltraBlurColors/Country/Style/
+Mood at the top level plus Stream[] inside each Media.Part, keeping
+Guid[]/Media.Part.file/Field[]/edition titles/viewed state — ~80%
+size reduction on movies with deep casts, the biggest token-economy
+offender per the 2026-05-11 retro. Earlier today: plex_get_image
+shipped + v0.7.0 tagged consolidating split+merge tools + opt-in
+HTTPS + ChatGPT Apps SDK alignment spec.)
 
 ## Phase
 
@@ -148,40 +150,63 @@ downloader-mcp.
     against live Plex). fields projection asserts only requested
     keys appear in each item.
 
-- **v0.8 in flight (2026-05-17).** First tool shipped:
-  `plex_get_image` (29 → 30 total). Returns poster/art/banner/
-  squareArt/clearLogo bytes as an MCP image content block
-  (`{type: "image", data: <base64>, mimeType}`), not as text-
-  wrapped base64 — the distinction that makes vision-capable
-  clients actually see the picture.
-  - Two entry points: `rating_key` (default fetches the selected
-    poster via the item's direct `thumb`/`art`/`banner` field;
-    falls back to `Image[]` for `squareArt`/`clearLogo` which
-    have no direct field) or `image_url` (a pre-resolved relative
-    Plex path like `/library/metadata/.../thumb/...` from a prior
-    tool response). image_url paths must start with `/` —
-    defense-in-depth so we don't proxy arbitrary URLs.
-  - Resize support via optional `max_width` / `max_height` routes
-    through Plex's `/photo/:/transcode` endpoint. Plex's transcoder
-    rejects width-only or height-only requests; when only one
-    dimension is given we mirror it to the other (Plex preserves
-    aspect ratio internally). minSize=1 + upscale=0 in the request.
-  - Size cap defaults to 4 MiB raw (~5.3 MB after base64,
-    Claude's practical per-image limit); override via
-    `MCP_IMAGE_MAX_BYTES`. Cap-exceeded error suggests
-    `max_width=800` as the workaround. We check `Content-Length`
-    pre-read when available, plus a post-read guard for servers
-    that don't send it.
-  - PlexClient gained `fetchBinary(path, params)` (no JSON parse,
-    `Accept: image/*`, strips Content-Type parameters down to the
-    bare MIME) and public `getImageBytes(args)`. New
-    `helpers.asImage(buffer, mimeType)` sibling to `asText`;
-    `ToolResult` typing broadened to allow image blocks.
-  - Tests added (38 → 38, two new image-specific): structural
-    shape check (magic-byte sniff for JPEG/PNG), plus transcode
-    happy-path with `max_width=200`.
-  - Write side (`plex_set_image` / poster upload) deferred — will
-    unify with the queued poster-management work below.
+- **v0.8 in flight (2026-05-17).** Two items shipped so far. Tool
+  count 29 → 30 (one new tool; the second item enhances an existing
+  tool).
+  - **`plex_get_item` sparse projection + minimal mode.** The
+    biggest token-economy offender per the 2026-05-11 retro (full
+    responses were 80–100 KB on movies with deep casts; Role[]
+    alone was 80%+ of the payload). Two new options:
+    - `minimal=true` returns a curated lean view. Drops Role[],
+      Director[], Writer[], Producer[], Image[], UltraBlurColors,
+      Country[], Style[], Mood[] at the top level, plus Stream[]
+      inside each Media.Part. Keeps Guid[], Media.Part.file (the
+      operational must-have for filesystem ops), Field[] lock
+      state, editionTitle, viewed state (viewCount/lastViewedAt),
+      and all primary identity fields.
+    - `fields=[...]` allowlist projection — explicit overrides
+      `minimal` when both are set.
+    - Mirrors the `plex_browse` projection pattern shipped in v0.6.
+      Client-side filter; Plex's API still sends the full payload
+      so the bandwidth win goes only to the MCP-LLM boundary, but
+      that's where the token-cap pain was.
+    - Tests added (38 → 40): minimal mode asserts bulky arrays
+      dropped + Stream[] removed from Part[] + identity fields
+      preserved; fields mode asserts exact key set.
+
+  - **`plex_get_image`** — first new v0.8 tool. Returns poster/art/
+    banner/squareArt/clearLogo bytes as an MCP image content block
+    (`{type: "image", data: <base64>, mimeType}`), not as text-
+    wrapped base64 — the distinction that makes vision-capable
+    clients actually see the picture.
+    - Two entry points: `rating_key` (default fetches the selected
+      poster via the item's direct `thumb`/`art`/`banner` field;
+      falls back to `Image[]` for `squareArt`/`clearLogo` which
+      have no direct field) or `image_url` (a pre-resolved relative
+      Plex path like `/library/metadata/.../thumb/...` from a prior
+      tool response). image_url paths must start with `/` —
+      defense-in-depth so we don't proxy arbitrary URLs.
+    - Resize support via optional `max_width` / `max_height`
+      routes through Plex's `/photo/:/transcode` endpoint. Plex's
+      transcoder rejects width-only or height-only requests; when
+      only one dimension is given we mirror it to the other (Plex
+      preserves aspect ratio internally). minSize=1 + upscale=0
+      in the request.
+    - Size cap defaults to 4 MiB raw (~5.3 MB after base64,
+      Claude's practical per-image limit); override via
+      `MCP_IMAGE_MAX_BYTES`. Cap-exceeded error suggests
+      `max_width=800` as the workaround. We check `Content-Length`
+      pre-read when available, plus a post-read guard for servers
+      that don't send it.
+    - PlexClient gained `fetchBinary(path, params)` (no JSON parse,
+      `Accept: image/*`, strips Content-Type parameters down to
+      the bare MIME) and public `getImageBytes(args)`. New
+      `helpers.asImage(buffer, mimeType)` sibling to `asText`;
+      `ToolResult` typing broadened to allow image blocks.
+    - Tests added: structural shape check (magic-byte sniff for
+      JPEG/PNG), plus transcode happy-path with `max_width=200`.
+    - Write side (`plex_set_image` / poster upload) deferred —
+      will unify with the queued poster-management work below.
 
 - **v0.7 shipped: 2 new admin tools (27 → 29 total).** Closes the
   remaining audit-derived items by giving Plex's own "Split Apart"

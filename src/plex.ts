@@ -261,11 +261,77 @@ export class PlexClient {
     return data.MediaContainer?.Metadata ?? [];
   }
 
-  async getItem(ratingKey: string): Promise<unknown> {
+  async getItem(
+    ratingKey: string,
+    options: { fields?: string[]; minimal?: boolean } = {},
+  ): Promise<unknown> {
     const data = await this.request<{ Metadata?: unknown[] }>(
       `/library/metadata/${ratingKey}`,
     );
-    return data.MediaContainer?.Metadata?.[0];
+    const item = data.MediaContainer?.Metadata?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    if (!item) return undefined;
+
+    // Explicit field projection beats minimal mode if both are set.
+    if (options.fields && options.fields.length > 0) {
+      const projected: Record<string, unknown> = {};
+      for (const key of options.fields) {
+        if (key in item) projected[key] = item[key];
+      }
+      return projected;
+    }
+
+    // Curated drop-list for minimal mode. These are the heavyweights:
+    // Role[] alone is typically 80%+ of an item's payload on movies
+    // with deep casts. Stream[] inside each Media.Part adds another
+    // ~3KB per file. UltraBlurColors is purely cosmetic. The kept
+    // fields cover the operational use cases (file path, GUID,
+    // locked-field state, title/year/edition, viewed state).
+    if (options.minimal) {
+      const DROP_TOP_LEVEL = new Set([
+        "Role",
+        "Director",
+        "Writer",
+        "Producer",
+        "Image",
+        "UltraBlurColors",
+        "Country",
+        "Style",
+        "Mood",
+      ]);
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(item)) {
+        if (DROP_TOP_LEVEL.has(k)) continue;
+        if (k === "Media" && Array.isArray(v)) {
+          out[k] = (v as Array<Record<string, unknown>>).map((media) => {
+            const trimmedMedia: Record<string, unknown> = {};
+            for (const [mk, mv] of Object.entries(media)) {
+              if (mk === "Part" && Array.isArray(mv)) {
+                trimmedMedia[mk] = (mv as Array<Record<string, unknown>>).map(
+                  (part) => {
+                    const trimmedPart: Record<string, unknown> = {};
+                    for (const [pk, pv] of Object.entries(part)) {
+                      if (pk === "Stream") continue;
+                      trimmedPart[pk] = pv;
+                    }
+                    return trimmedPart;
+                  },
+                );
+              } else {
+                trimmedMedia[mk] = mv;
+              }
+            }
+            return trimmedMedia;
+          });
+        } else {
+          out[k] = v;
+        }
+      }
+      return out;
+    }
+
+    return item;
   }
 
   async getChildren(ratingKey: string): Promise<unknown[]> {
