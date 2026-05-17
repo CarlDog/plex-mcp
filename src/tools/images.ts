@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asImage, withLogging } from "./helpers.js";
+import { READ_ONLY_ANNOTATIONS, asImage, withLogging } from "./helpers.js";
 
 export function registerImageTools(server: McpServer, plex: PlexClient): void {
   server.registerTool(
@@ -48,6 +48,7 @@ export function registerImageTools(server: McpServer, plex: PlexClient): void {
           .optional()
           .describe("Max height in pixels. Same semantics as max_width."),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging(
       "plex_get_image",

@@ -192,12 +192,18 @@ Each phase is a self-contained chunk that can ship independently.
 Order is not strict — phase 1 is the lowest-cost win even without
 the rest.
 
-### Phase 1: tool annotations (no infra, ~half day)
+### Phase 1: tool annotations (no infra, ~half day) — DONE 2026-05-17
 
-- Add `readOnlyHint` / `destructiveHint` / `openWorldHint` to
-  every tool registration per the table above.
-- Polish descriptions to lead with `"Use this when…"`.
-- No infra change; benefits stock MCP clients too.
+- ✅ Added `readOnlyHint` / `destructiveHint` / `idempotentHint` /
+  `openWorldHint` to every tool registration. Four canonical
+  annotation shapes defined in `src/tools/helpers.ts`
+  (`READ_ONLY_ANNOTATIONS`, `SAFE_WRITE_ANNOTATIONS`,
+  `SAFE_IDEMPOTENT_WRITE_ANNOTATIONS`, `DESTRUCTIVE_ANNOTATIONS`)
+  so future tools can pick a shape rather than re-deciding the
+  four bits.
+- Description polish (lead with "Use this when…") deferred —
+  separate opinion-heavy scope, not gating on the OAuth work.
+- Benefits stock MCP clients too, not just ChatGPT.
 
 ### Phase 2: code-side auth (no infra, ~half day)
 

@@ -5,7 +5,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText, withLogging } from "./helpers.js";
+import { READ_ONLY_ANNOTATIONS, asText, withLogging } from "./helpers.js";
 
 const PLEX_TYPE_CODES: Record<string, number> = {
   movie: 1,
@@ -27,6 +27,7 @@ export function registerDiscoveryTools(
       title: "List Plex Libraries",
       description: "List all libraries (sections) on the Plex server.",
       inputSchema: {},
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_list_libraries", async () =>
       asText(await plex.listLibraries()),
@@ -40,6 +41,7 @@ export function registerDiscoveryTools(
       description:
         "Search across all Plex libraries for movies, shows, episodes, music, etc.",
       inputSchema: { query: z.string().describe("Search query") },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_search", async ({ query }) =>
       asText(await plex.search(query)),
@@ -58,6 +60,7 @@ export function registerDiscoveryTools(
           .optional()
           .describe("Optional library section ID to filter to"),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_recently_added", async ({ section_id }) =>
       asText(await plex.recentlyAdded(section_id)),
@@ -71,6 +74,7 @@ export function registerDiscoveryTools(
       description:
         'Get items "on deck" — partially watched or next-up content.',
       inputSchema: {},
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_on_deck", async () => asText(await plex.onDeck())),
   );
@@ -96,6 +100,7 @@ export function registerDiscoveryTools(
             "If provided, the returned item is projected to just these top-level keys. Overrides `minimal`.",
           ),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_get_item", async ({ rating_key, minimal, fields }) =>
       asText(await plex.getItem(rating_key, { minimal, fields })),
@@ -113,6 +118,7 @@ export function registerDiscoveryTools(
           .string()
           .describe("The Plex rating key of the parent item"),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_get_children", async ({ rating_key }) =>
       asText(await plex.getChildren(rating_key)),
@@ -161,6 +167,7 @@ export function registerDiscoveryTools(
             "If provided, each returned item is projected to just these keys. For audits, ['ratingKey','title','year','type'] is usually enough.",
           ),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging(
       "plex_browse",
@@ -185,6 +192,7 @@ export function registerDiscoveryTools(
       inputSchema: {
         rating_key: z.string().describe("The Plex rating key of the item"),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_related", async ({ rating_key }) =>
       asText(await plex.related(rating_key)),
@@ -200,6 +208,7 @@ export function registerDiscoveryTools(
       inputSchema: {
         rating_key: z.string().describe("The Plex rating key of the item"),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging("plex_similar", async ({ rating_key }) =>
       asText(await plex.similar(rating_key)),

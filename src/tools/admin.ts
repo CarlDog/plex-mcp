@@ -5,7 +5,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { asText, withLogging } from "./helpers.js";
+import {
+  READ_ONLY_ANNOTATIONS,
+  SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
+  SAFE_WRITE_ANNOTATIONS,
+  asText,
+  withLogging,
+} from "./helpers.js";
 
 export function registerAdminTools(server: McpServer, plex: PlexClient): void {
   server.registerTool(
@@ -25,6 +31,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
             "If true, bypass agent cache for a deep refresh (slower, more server load).",
           ),
       },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     withLogging("plex_refresh_metadata", async ({ rating_key, force }) => {
       await plex.refreshMetadata(rating_key, { force });
@@ -57,6 +64,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
           .optional()
           .describe("Override the year to search for."),
       },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging(
       "plex_get_matches",
@@ -88,6 +96,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
             "The matched item's name (from plex_get_matches SearchResult.name). Required by Plex.",
           ),
       },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     withLogging("plex_apply_match", async ({ rating_key, guid, name }) => {
       await plex.applyMatch(rating_key, guid, name);
@@ -131,6 +140,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
             "If true (default), each set field gets .locked=1 so future refreshes preserve it. Set false only for transient overrides that should be re-derived from the agent on next refresh.",
           ),
       },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     withLogging("plex_edit_metadata", async ({ rating_key, fields, lock }) => {
       // Translate snake_case → camelCase for Plex's API.
@@ -168,6 +178,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
           .string()
           .describe("The Plex rating key of the item to unmatch"),
       },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     withLogging("plex_unmatch", async ({ rating_key }) => {
       await plex.unmatch(rating_key);
@@ -194,6 +205,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
             "If true, deep-refresh every item in the section (slow). Default false runs an incremental scan.",
           ),
       },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
     },
     withLogging("plex_refresh_section", async ({ section_id, force }) => {
       await plex.refreshSection(section_id, { force });
@@ -212,6 +224,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
           .string()
           .describe("The Plex rating key of the item to split apart"),
       },
+      annotations: SAFE_WRITE_ANNOTATIONS,
     },
     withLogging("plex_split_item", async ({ rating_key }) => {
       await plex.splitItem(rating_key);
@@ -238,6 +251,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
             "List of source ratingKeys to absorb into the target. Each will disappear after the merge.",
           ),
       },
+      annotations: SAFE_WRITE_ANNOTATIONS,
     },
     withLogging(
       "plex_merge_items",
