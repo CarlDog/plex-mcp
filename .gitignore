@@ -37,3 +37,6 @@ venv/
 
 # Test output
 coverage/
+
+# Claude Code local state (permission grants, runtime locks, worktrees)
+.claude/
