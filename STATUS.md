@@ -1,13 +1,11 @@
 # Status
 
-**Last updated:** 2026-05-17 (HTTPS support landed: self-managed
-cert + BYO modes on the HTTP transport. New env vars MCP_TLS,
-MCP_TLS_DIR, MCP_TLS_SAN, MCP_TLS_CN, MCP_TLS_DAYS, MCP_TLS_CERT_FILE,
-MCP_TLS_KEY_FILE — see README "Enabling HTTPS". Stays opt-in; existing
-http://carldog-nas:3001/mcp deployment unaffected without a redeploy.
-Also captured ChatGPT Apps SDK alignment plan in
-docs/CHATGPT-APPS-SDK.md for future pickup — OAuth 2.1, tool
-annotations, optional widgets, infrastructure choices.)
+**Last updated:** 2026-05-17 (v0.7.0 ship — version-bump commit
+consolidates split + merge tools, opt-in HTTPS on the HTTP transport,
+and the ChatGPT Apps SDK alignment spec at
+docs/CHATGPT-APPS-SDK.md. Next up: v0.8 opens with plex_get_image
+— retrieve poster/art bytes as an MCP image content block for
+vision-capable clients to analyze.)
 
 ## Phase
 
@@ -149,6 +147,29 @@ downloader-mcp.
     against live Plex). fields projection asserts only requested
     keys appear in each item.
 
+- **v0.7 shipped: 2 new admin tools (27 → 29 total).** Closes the
+  remaining audit-derived items by giving Plex's own "Split Apart"
+  + "Merge" web-UI surface to the MCP toolset.
+  - `plex_split_item` (PUT `/library/metadata/{key}/split`) — split
+    an auto-merged Plex item back into its constituent media as N
+    separate items. The audit's earlier speculation ("Plex has no
+    item-split primitive") was wrong; `split` is exactly what the
+    web UI calls. Cross-validated against python-plexapi's
+    `split_merge.py` mixin and live-probed before ship.
+  - `plex_merge_items` (PUT `/library/metadata/{key}/merge?ids=<csv>`)
+    — merge other items INTO a target. Sources absorbed; target
+    survives. Symmetric inverse of split.
+  - No automated tests added for either — both mutate Plex catalog
+    state in ways that aren't safely round-trippable against a
+    real library. Covered by live-probe verification during ship.
+  - Unblocks operator actions for WWE SummerSlam Night 2 (split →
+    apply_match) and WWE Royal Rumble 2026 triplicate (merge,
+    which sidesteps the apply_match permission-hook false
+    positive entirely).
+  - v0.7.0 release also bundles opt-in HTTPS on the HTTP transport
+    (see separate entry below) and the ChatGPT Apps SDK alignment
+    spec at `docs/CHATGPT-APPS-SDK.md` — future work, not started.
+
 - **HTTPS support on the HTTP transport (2026-05-17).** Opt-in TLS
   for the Streamable HTTP listener. New `src/tls.ts` module
   resolves credentials in order: BYO PEM files
@@ -184,39 +205,61 @@ downloader-mcp.
   self-hosted IdP), and end-to-end ChatGPT dev-mode verification.
   Total estimated effort ~week of evening time, distributed.
 
-- **v0.7 in flight (2026-05-13).**
-  - **Shipped:** `plex_split_item` + `plex_merge_items` (commit
-    `27f6d13`). Endpoints `PUT /library/metadata/{key}/split` and
-    `PUT /library/metadata/{key}/merge?ids=<csv>`, both confirmed
-    against `python-plexapi`'s `split_merge.py` mixin and live-probed.
-    The audit's speculation that "Plex has no item-split primitive"
-    was wrong — `split` is exactly what the web UI's "Split Apart"
-    calls.
-  - **Pending shipped-related operator actions:**
-    - WWE SummerSlam 2025 Night 2 (rk 207172) — now solvable via
-      `plex_split_item` to break the 11-file mis-grouping into
-      separate items, then `plex_apply_match` on each.
-    - WWE Royal Rumble 2026 triplicate (rk 206822 + 207232 +
-      207233) — now solvable via `plex_merge_items(206822,
-      [207232, 207233])`. Sidesteps the hook false-positive
-      entirely (no `apply_match` involved).
-  - **v0.7 additional candidates** (cross-validation 2026-05-13 against
-    python-plexapi confirmed these endpoint shapes — see
-    `docs/PLEX-API.md` cross-validation section):
-    1. `plex_rate_item(rating_key, rating)` — `PUT /:/rate?...` —
-       0–10 scale to 0–5 stars. pkkid `mixins/rating.py`.
-    2. `plex_remove_from_continue_watching(rating_key)` —
-       `PUT /actions/removeFromContinueWatching?ratingKey=` —
-       cleans up the Continue Watching hub. pkkid `video.py`.
-    3. `plex_update_timeline(rating_key, time_ms, state, duration_ms?)` —
-       `GET /:/timeline?...` — set playback resume position. Was
-       deferred in v0.4 as "low value vs scrobble"; pkkid
-       confirms shape now. Reconsider whether to ship.
-    4. `plex_empty_section_trash(section_id)` — `PUT /library/sections/{id}/emptyTrash`
-       — post-cleanup helper for bulk filesystem ops.
-    5. Section-scoped `plex_on_deck(section_id?)` — extend the
-       existing tool with optional `section_id` arg
-       (`GET /library/sections/{id}/onDeck`).
+- **v0.8 first: `plex_get_image`.** Retrieve poster/art/background
+  bytes for an item as an MCP image content block so vision-capable
+  clients can analyze artwork directly. Closes the "look at the
+  poster and design matching ones for the other 14 specials in
+  this library" class of workflows that's impossible today (the
+  metadata response advertises image URLs but the bytes never
+  reach the model).
+  - Signature: `plex_get_image(rating_key OR image_url,
+    image_type?=thumb|art|squareArt|clearLogo|banner,
+    max_width?, max_height?)`.
+  - Native endpoint when no resize requested:
+    `GET {item.<image_type>}` (item's direct field, not Image[]).
+    Transcode endpoint when max_width/height set:
+    `GET /photo/:/transcode?url=<encoded>&width=W&height=H`.
+  - Returns `{type: "image", data: <base64>, mimeType: <from
+    response Content-Type with params stripped>}` — the critical
+    distinction that makes this work (text-wrapped base64 is not
+    visually renderable).
+  - New `PlexClient.fetchBinary(path, params)` private method,
+    separate from the JSON-parsing `request<T>` (which forces
+    `Accept: application/json`).
+  - New `helpers.asImage(buffer, mimeType)` sibling to `asText`,
+    plus extend `ToolResult` type to support image content.
+  - Default 4 MB raw size cap (~5 MB after base64 expansion,
+    Claude's practical per-image limit), overridable via
+    `MCP_IMAGE_MAX_BYTES` env. Cap-exceeded error suggests
+    `max_width=800` as the workaround.
+  - 401 → token/auth error. 404 → distinguish "rating_key not
+    found" vs "image_type not set on this item." 5xx → surface
+    upstream status.
+  - No automated test for the image-fetch round-trip — fixtures
+    can vary, vision-rendering check requires a vision client.
+    Live-probe verification at ship time, similar to split/merge.
+  - Defer the write side (`plex_set_image` / `plex_upload_poster`):
+    same Plex endpoint as the queued v0.8 poster-management work
+    below. Unify when that ships.
+
+- **Other v0.8 / v0.9 candidates carried from v0.7 queue.**
+  Endpoint shapes confirmed against python-plexapi 2026-05-13
+  (see `docs/PLEX-API.md` cross-validation section). None
+  shipped yet:
+  1. `plex_rate_item(rating_key, rating)` — `PUT /:/rate?...` —
+     0–10 scale to 0–5 stars. pkkid `mixins/rating.py`.
+  2. `plex_remove_from_continue_watching(rating_key)` —
+     `PUT /actions/removeFromContinueWatching?ratingKey=` —
+     cleans up the Continue Watching hub. pkkid `video.py`.
+  3. `plex_update_timeline(rating_key, time_ms, state, duration_ms?)` —
+     `GET /:/timeline?...` — set playback resume position. Was
+     deferred in v0.4 as "low value vs scrobble"; pkkid
+     confirms shape now. Reconsider whether to ship.
+  4. `plex_empty_section_trash(section_id)` — `PUT /library/sections/{id}/emptyTrash`
+     — post-cleanup helper for bulk filesystem ops.
+  5. Section-scoped `plex_on_deck(section_id?)` — extend the
+     existing tool with optional `section_id` arg
+     (`GET /library/sections/{id}/onDeck`).
 - **Outstanding audit items now closed by v0.6 + v0.7.** All four of
   the originally-blocked WWE PPV items have a resolution path
   using shipped tools. Pending only operator actions.
