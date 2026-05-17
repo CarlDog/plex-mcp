@@ -1,11 +1,12 @@
 # Status
 
-**Last updated:** 2026-05-17 (v0.7.0 ship — version-bump commit
-consolidates split + merge tools, opt-in HTTPS on the HTTP transport,
-and the ChatGPT Apps SDK alignment spec at
-docs/CHATGPT-APPS-SDK.md. Next up: v0.8 opens with plex_get_image
-— retrieve poster/art bytes as an MCP image content block for
-vision-capable clients to analyze.)
+**Last updated:** 2026-05-17 (v0.8 opens — plex_get_image shipped,
+returning artwork bytes as an MCP image content block so vision-
+capable clients can analyze posters/art/banners/logos directly.
+First tool in src/tools/images.ts; PlexClient gained fetchBinary
+and getImageBytes. Tests added against live Plex. Earlier today:
+v0.7.0 tagged consolidating split+merge tools + opt-in HTTPS +
+ChatGPT Apps SDK alignment spec.)
 
 ## Phase
 
@@ -147,6 +148,41 @@ downloader-mcp.
     against live Plex). fields projection asserts only requested
     keys appear in each item.
 
+- **v0.8 in flight (2026-05-17).** First tool shipped:
+  `plex_get_image` (29 → 30 total). Returns poster/art/banner/
+  squareArt/clearLogo bytes as an MCP image content block
+  (`{type: "image", data: <base64>, mimeType}`), not as text-
+  wrapped base64 — the distinction that makes vision-capable
+  clients actually see the picture.
+  - Two entry points: `rating_key` (default fetches the selected
+    poster via the item's direct `thumb`/`art`/`banner` field;
+    falls back to `Image[]` for `squareArt`/`clearLogo` which
+    have no direct field) or `image_url` (a pre-resolved relative
+    Plex path like `/library/metadata/.../thumb/...` from a prior
+    tool response). image_url paths must start with `/` —
+    defense-in-depth so we don't proxy arbitrary URLs.
+  - Resize support via optional `max_width` / `max_height` routes
+    through Plex's `/photo/:/transcode` endpoint. Plex's transcoder
+    rejects width-only or height-only requests; when only one
+    dimension is given we mirror it to the other (Plex preserves
+    aspect ratio internally). minSize=1 + upscale=0 in the request.
+  - Size cap defaults to 4 MiB raw (~5.3 MB after base64,
+    Claude's practical per-image limit); override via
+    `MCP_IMAGE_MAX_BYTES`. Cap-exceeded error suggests
+    `max_width=800` as the workaround. We check `Content-Length`
+    pre-read when available, plus a post-read guard for servers
+    that don't send it.
+  - PlexClient gained `fetchBinary(path, params)` (no JSON parse,
+    `Accept: image/*`, strips Content-Type parameters down to the
+    bare MIME) and public `getImageBytes(args)`. New
+    `helpers.asImage(buffer, mimeType)` sibling to `asText`;
+    `ToolResult` typing broadened to allow image blocks.
+  - Tests added (38 → 38, two new image-specific): structural
+    shape check (magic-byte sniff for JPEG/PNG), plus transcode
+    happy-path with `max_width=200`.
+  - Write side (`plex_set_image` / poster upload) deferred — will
+    unify with the queued poster-management work below.
+
 - **v0.7 shipped: 2 new admin tools (27 → 29 total).** Closes the
   remaining audit-derived items by giving Plex's own "Split Apart"
   + "Merge" web-UI surface to the MCP toolset.
@@ -204,43 +240,6 @@ downloader-mcp.
   OAuth middleware in plex-mcp, Cloudflare Tunnel + Auth0 (or
   self-hosted IdP), and end-to-end ChatGPT dev-mode verification.
   Total estimated effort ~week of evening time, distributed.
-
-- **v0.8 first: `plex_get_image`.** Retrieve poster/art/background
-  bytes for an item as an MCP image content block so vision-capable
-  clients can analyze artwork directly. Closes the "look at the
-  poster and design matching ones for the other 14 specials in
-  this library" class of workflows that's impossible today (the
-  metadata response advertises image URLs but the bytes never
-  reach the model).
-  - Signature: `plex_get_image(rating_key OR image_url,
-    image_type?=thumb|art|squareArt|clearLogo|banner,
-    max_width?, max_height?)`.
-  - Native endpoint when no resize requested:
-    `GET {item.<image_type>}` (item's direct field, not Image[]).
-    Transcode endpoint when max_width/height set:
-    `GET /photo/:/transcode?url=<encoded>&width=W&height=H`.
-  - Returns `{type: "image", data: <base64>, mimeType: <from
-    response Content-Type with params stripped>}` — the critical
-    distinction that makes this work (text-wrapped base64 is not
-    visually renderable).
-  - New `PlexClient.fetchBinary(path, params)` private method,
-    separate from the JSON-parsing `request<T>` (which forces
-    `Accept: application/json`).
-  - New `helpers.asImage(buffer, mimeType)` sibling to `asText`,
-    plus extend `ToolResult` type to support image content.
-  - Default 4 MB raw size cap (~5 MB after base64 expansion,
-    Claude's practical per-image limit), overridable via
-    `MCP_IMAGE_MAX_BYTES` env. Cap-exceeded error suggests
-    `max_width=800` as the workaround.
-  - 401 → token/auth error. 404 → distinguish "rating_key not
-    found" vs "image_type not set on this item." 5xx → surface
-    upstream status.
-  - No automated test for the image-fetch round-trip — fixtures
-    can vary, vision-rendering check requires a vision client.
-    Live-probe verification at ship time, similar to split/merge.
-  - Defer the write side (`plex_set_image` / `plex_upload_poster`):
-    same Plex endpoint as the queued v0.8 poster-management work
-    below. Unify when that ships.
 
 - **Other v0.8 / v0.9 candidates carried from v0.7 queue.**
   Endpoint shapes confirmed against python-plexapi 2026-05-13

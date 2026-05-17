@@ -6,8 +6,21 @@ export const asText = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
 });
 
+export const asImage = (bytes: Buffer, mimeType: string) => ({
+  content: [
+    {
+      type: "image" as const,
+      data: bytes.toString("base64"),
+      mimeType,
+    },
+  ],
+});
+
 type ToolArgs = Record<string, unknown>;
-type ToolResult = { content: Array<{ type: "text"; text: string }> };
+type TextBlock = { type: "text"; text: string };
+type ImageBlock = { type: "image"; data: string; mimeType: string };
+type ContentBlock = TextBlock | ImageBlock;
+type ToolResult = { content: ContentBlock[] };
 type ToolHandler<A extends ToolArgs> = (args: A) => Promise<ToolResult>;
 
 /**

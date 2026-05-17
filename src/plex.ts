@@ -591,4 +591,159 @@ export class PlexClient {
       "PUT",
     );
   }
+
+  /**
+   * Resolve and fetch image bytes for a Plex item. See the
+   * plex_get_image tool registration for the user-facing contract.
+   *
+   * Resolution order:
+   * 1. If `imageUrl` is given, use it directly (must be relative).
+   * 2. Otherwise look up the item by `ratingKey`. Direct fields
+   *    (`thumb`, `art`, `banner`) win over Image[] entries because
+   *    they reflect the *selected* image; Image[] is the agent's
+   *    full candidate set.
+   *
+   * When `maxWidth`/`maxHeight` is set, route through Plex's
+   * `/photo/:/transcode` endpoint so the server resamples rather
+   * than us pulling a 5 MB original.
+   */
+  async getImageBytes(args: {
+    ratingKey?: string;
+    imageUrl?: string;
+    imageType?: "thumb" | "art" | "banner" | "squareArt" | "clearLogo";
+    maxWidth?: number;
+    maxHeight?: number;
+  }): Promise<{ bytes: Buffer; mimeType: string }> {
+    const relativeUrl = args.imageUrl
+      ? args.imageUrl
+      : await this.resolveImagePath(args.ratingKey!, args.imageType ?? "thumb");
+
+    if (args.maxWidth || args.maxHeight) {
+      // Plex's /photo/:/transcode rejects requests with width-only
+      // or height-only. When only one dimension is provided, mirror
+      // it to the other — Plex resamples to fit the bounding box
+      // and preserves aspect ratio internally.
+      const dim = String(args.maxWidth ?? args.maxHeight);
+      const params: Record<string, string> = {
+        url: relativeUrl,
+        width: args.maxWidth ? String(args.maxWidth) : dim,
+        height: args.maxHeight ? String(args.maxHeight) : dim,
+        minSize: "1",
+        upscale: "0",
+      };
+      return this.fetchBinary("/photo/:/transcode", params);
+    }
+    return this.fetchBinary(relativeUrl);
+  }
+
+  private async resolveImagePath(
+    ratingKey: string,
+    imageType: "thumb" | "art" | "banner" | "squareArt" | "clearLogo",
+  ): Promise<string> {
+    const item = (await this.getItem(ratingKey)) as
+      | {
+          thumb?: string;
+          art?: string;
+          banner?: string;
+          Image?: Array<{ type?: string; url?: string }>;
+        }
+      | undefined;
+    if (!item) {
+      throw new Error(`Plex item not found for ratingKey=${ratingKey}`);
+    }
+
+    const directField =
+      imageType === "thumb"
+        ? item.thumb
+        : imageType === "art"
+          ? item.art
+          : imageType === "banner"
+            ? item.banner
+            : undefined;
+    if (directField) return directField;
+
+    // Fall back to Image[] for types without a direct field, and
+    // for banner when the direct field is unset.
+    const imageEntryType =
+      imageType === "squareArt"
+        ? "clearArt"
+        : imageType === "clearLogo"
+          ? "clearLogo"
+          : imageType === "banner"
+            ? "banner"
+            : imageType === "art"
+              ? "background"
+              : "coverPoster";
+    const entry = item.Image?.find((i) => i.type === imageEntryType);
+    if (entry?.url) return entry.url;
+
+    throw new Error(
+      `Plex item ${ratingKey} has no image of type "${imageType}"`,
+    );
+  }
+
+  private async fetchBinary(
+    path: string,
+    params: Record<string, string> = {},
+  ): Promise<{ bytes: Buffer; mimeType: string }> {
+    const url = new URL(path, this.config.url);
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+    const start = Date.now();
+    log.debug("plex", "fetch binary", { path });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: {
+          "X-Plex-Token": this.config.token,
+          Accept: "image/*",
+        },
+      });
+    } catch (err) {
+      log.error("plex", "network error", {
+        path,
+        ms: Date.now() - start,
+        msg: (err as Error).message,
+      });
+      throw err;
+    }
+    const ms = Date.now() - start;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      log.warn("plex", "http error", { path, status: res.status, ms });
+      throw new Error(
+        `Plex ${res.status} ${res.statusText} for GET ${path}: ${body.slice(0, 200)}`,
+      );
+    }
+
+    const cap = Number.parseInt(
+      process.env.MCP_IMAGE_MAX_BYTES ?? "4194304",
+      10,
+    );
+    const contentLength = res.headers.get("content-length");
+    if (contentLength && Number.parseInt(contentLength, 10) > cap) {
+      throw new Error(
+        `Plex image at ${path} is ${contentLength} bytes, exceeds MCP_IMAGE_MAX_BYTES=${cap}. Pass max_width or max_height to transcode.`,
+      );
+    }
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.byteLength > cap) {
+      throw new Error(
+        `Plex image at ${path} is ${buffer.byteLength} bytes (no content-length header), exceeds MCP_IMAGE_MAX_BYTES=${cap}. Pass max_width or max_height to transcode.`,
+      );
+    }
+
+    const rawType = res.headers.get("content-type") ?? "image/jpeg";
+    const mimeType = rawType.split(";")[0]!.trim();
+    log.debug("plex", "ok binary", {
+      path,
+      status: res.status,
+      ms,
+      bytes: buffer.byteLength,
+      mime: mimeType,
+    });
+    return { bytes: buffer, mimeType };
+  }
 }
