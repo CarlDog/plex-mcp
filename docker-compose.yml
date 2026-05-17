@@ -10,6 +10,26 @@ services:
       MCP_PORT: "3000"
       PLEX_URL: "${PLEX_URL}"
       PLEX_TOKEN: "${PLEX_TOKEN}"
+      # Optional HTTPS — pick ONE of the two modes below.
+      #
+      # (a) Self-managed cert (recommended for LAN-only deployment):
+      #     MCP_TLS: "auto"
+      #     MCP_TLS_DIR: "/data/certs"              # mount a volume here to persist
+      #     MCP_TLS_SAN: "DNS:carldog-nas,IP:127.0.0.1"
+      #     MCP_TLS_CN: "carldog-nas"               # optional; defaults to first DNS SAN
+      #     MCP_TLS_DAYS: "365"                     # optional; rotates when <30 days remain
+      #
+      # (b) Bring-your-own cert (Let's Encrypt, internal CA, etc.):
+      #     MCP_TLS_CERT_FILE: "/certs/fullchain.pem"
+      #     MCP_TLS_KEY_FILE:  "/certs/privkey.pem"
+      #
+      # When TLS is on, switch the healthcheck below to wget --no-check-certificate
+      # against https://localhost:3000/health.
+    # volumes:
+    #   # Self-managed: persist cert across restarts. Optional but recommended.
+    #   - ./certs:/data/certs
+    #   # BYO: read-only mount of your own cert + key.
+    #   # - ./certs:/certs:ro
     extra_hosts:
       # Lets the container reach Plex when it's running on the same host.
       # Use PLEX_URL=http://host.docker.internal:32400 in that case.

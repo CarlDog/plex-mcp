@@ -70,9 +70,67 @@ In HTTP mode the server exposes:
 - `POST/GET/DELETE /mcp` — MCP Streamable HTTP endpoint (per spec)
 - `GET /health` — liveness probe (used by docker healthcheck)
 
-> HTTP mode currently has **no auth**. Bind only to a private network.
-> Rely on host firewall or LAN isolation. Don't expose to the public
-> internet without adding bearer-token auth first.
+> HTTP mode has **no caller authentication** — TLS (below) encrypts
+> traffic but doesn't identify the caller. Bind only to a private
+> network. Rely on host firewall or LAN isolation. Don't expose to the
+> public internet without adding bearer-token auth first.
+
+### Enabling HTTPS
+
+HTTPS is opt-in. Resolution order at startup:
+
+1. **Bring-your-own cert** — set both `MCP_TLS_CERT_FILE` and
+   `MCP_TLS_KEY_FILE` to PEM file paths. Use this when terminating
+   Let's Encrypt or an internal CA. The server reads them at startup;
+   restart the container to pick up renewed files.
+2. **Self-managed cert** (recommended for LAN-only setups) — set
+   `MCP_TLS=auto`. The server generates an ECDSA P-256 self-signed
+   cert on first start, writes it to `MCP_TLS_DIR` (default
+   `/data/certs`), and reuses it on subsequent starts. When the cert
+   is within 30 days of expiry it's regenerated automatically.
+3. Otherwise the server stays on plain HTTP (today's default).
+
+| Var | Default | Notes |
+| --- | --- | --- |
+| `MCP_TLS` | unset | `auto` / `true` / `on` / `1` to enable self-managed mode |
+| `MCP_TLS_DIR` | `/data/certs` | Where `server.crt` / `server.key` live. Mount a volume to persist. |
+| `MCP_TLS_SAN` | `DNS:localhost,IP:127.0.0.1` | Subject Alternative Names. Comma-separated `DNS:` / `IP:` entries. |
+| `MCP_TLS_CN` | first DNS SAN, else `plex-mcp` | Certificate common name. |
+| `MCP_TLS_DAYS` | `365` | Validity period. Cert rotates when <30 days remain. |
+| `MCP_TLS_CERT_FILE` | unset | BYO cert (PEM). Overrides `MCP_TLS=auto` when set together with the key. |
+| `MCP_TLS_KEY_FILE` | unset | BYO key (PEM). |
+
+On startup the server logs the cert's SHA-256 fingerprint and
+`notAfter`. Pin the fingerprint client-side, or trust the cert in
+your OS keystore for browsers and CLI tools.
+
+When TLS is on, the compose healthcheck needs the
+`--no-check-certificate` flag — update the `test:` line to
+`["CMD", "wget", "--no-check-certificate", "-q", "-O-", "https://localhost:3000/health"]`.
+
+#### Pointing `mcp-remote` at an HTTPS endpoint
+
+For a self-signed cert, either pin the cert file via Node's CA bundle
+or skip verification on the client (LAN-only):
+
+```bash
+# Trust the server's self-signed cert (preferred):
+NODE_EXTRA_CA_CERTS=./server.crt \
+  npx -y mcp-remote https://nas.local:3443/mcp
+
+# Or skip verification for quick testing (LAN-only):
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  npx -y mcp-remote https://nas.local:3443/mcp
+```
+
+#### Reverse-proxy alternative
+
+In-process TLS is convenient when you don't already run an ingress
+controller. If you have Caddy, Traefik, or nginx in front of your
+home services, the more idiomatic pattern is to terminate TLS at
+the proxy (with automatic Let's Encrypt) and keep `plex-mcp` on
+plain HTTP behind it. The two approaches are interchangeable — pick
+whichever matches your existing setup.
 
 ## Run with Docker (stdio, on demand)
 

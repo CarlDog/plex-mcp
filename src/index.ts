@@ -4,9 +4,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
+import { createServer as createHttpsServer } from "node:https";
 import express, { type Request, type Response } from "express";
 import { log } from "./log.js";
 import { PlexClient } from "./plex.js";
+import { resolveTlsCredentials } from "./tls.js";
 import { registerTools } from "./tools/index.js";
 
 const PLEX_URL = process.env.PLEX_URL;
@@ -109,13 +111,25 @@ if (port) {
     }
   });
 
+  const tls = await resolveTlsCredentials();
+  const transportLabel = tls ? "https" : "http";
+
   app.get("/health", (_req: Request, res: Response) => {
-    res.json({ status: "ok", transport: "http", port });
+    res.json({ status: "ok", transport: transportLabel, port });
   });
 
-  app.listen(port, () => {
-    log.info("server", "listening", { transport: "http", port });
-  });
+  if (tls) {
+    createHttpsServer({ cert: tls.cert, key: tls.key }, app).listen(
+      port,
+      () => {
+        log.info("server", "listening", { transport: "https", port });
+      },
+    );
+  } else {
+    app.listen(port, () => {
+      log.info("server", "listening", { transport: "http", port });
+    });
+  }
 } else {
   // Default: stdio transport (for direct invocation by MCP clients via `docker run -i`).
   const server = createServer();

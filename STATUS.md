@@ -1,13 +1,10 @@
 # Status
 
-**Last updated:** 2026-05-11 (session handoff — v0.8 candidate slate
-finalized: sparse fields on plex_get_item, poster/image management,
-plus cross-MCP token-economy work. Infrastructure-side work this
-session — extra_hosts sweep across 13 stacks, filesystem-mcp expanded
-to a second root for portainer-compose access, downloader-mcp URLs
-fixed — is captured in OC memory under tags
-`convention/infrastructure` and `reference/filesystem-mcp` rather
-than here, since it's environment-wide rather than plex-mcp-specific.)
+**Last updated:** 2026-05-17 (HTTPS support landed: self-managed
+cert + BYO modes on the HTTP transport. New env vars MCP_TLS,
+MCP_TLS_DIR, MCP_TLS_SAN, MCP_TLS_CN, MCP_TLS_DAYS, MCP_TLS_CERT_FILE,
+MCP_TLS_KEY_FILE — see README "Enabling HTTPS". Stays opt-in; existing
+http://carldog-nas:3001/mcp deployment unaffected without a redeploy.)
 
 ## Phase
 
@@ -148,6 +145,27 @@ downloader-mcp.
     incremental call without `force=1` (deep refresh is expensive
     against live Plex). fields projection asserts only requested
     keys appear in each item.
+
+- **HTTPS support on the HTTP transport (2026-05-17).** Opt-in TLS
+  for the Streamable HTTP listener. New `src/tls.ts` module
+  resolves credentials in order: BYO PEM files
+  (`MCP_TLS_CERT_FILE` + `MCP_TLS_KEY_FILE`), then self-managed
+  (`MCP_TLS=auto` generates an ECDSA P-256 self-signed cert under
+  `MCP_TLS_DIR`, default `/data/certs`, with SAN configurable via
+  `MCP_TLS_SAN`), then plain HTTP. Self-managed mode reuses the
+  on-disk cert across restarts and regenerates when <30 days
+  remain. SHA-256 fingerprint and `notAfter` logged on startup so
+  clients can pin the cert. docker-compose.yml gained commented
+  env-var + volume blocks; README has an "Enabling HTTPS" section
+  covering both modes plus a reverse-proxy-as-alternative note.
+  Dep added: `selfsigned@^5.5.0` (ships its own types; v5 is async
+  and supports ECDSA). No automated tests added — manual smoke
+  verified `curl --cacert server.crt https://localhost:3443/health`
+  returns `{"status":"ok","transport":"https"}` and a restart
+  reuses the on-disk cert without regen. CLAUDE.md "no auth" note
+  reworded — TLS encrypts in transit but doesn't authenticate
+  callers; the bearer-token gap remains as future work if exposing
+  beyond LAN.
 
 ## Next
 
