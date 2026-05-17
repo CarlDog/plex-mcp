@@ -38,6 +38,7 @@ your Plex libraries.
 | `plex_refresh_section` | Trigger a metadata refresh for an entire library section (incremental or deep) |
 | `plex_split_item` | Split a Plex item back into its constituent media variants as N separate items |
 | `plex_merge_items` | Merge other items INTO a target item (sources absorbed; target survives) |
+| `plex_get_image` | Fetch poster/art/banner/clearLogo bytes for an item as an MCP image content block (so vision-capable clients can actually see the picture); optional max_width/max_height routes through Plex's transcoder |
 
 ## Configuration
 

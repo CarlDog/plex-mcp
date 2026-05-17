@@ -101,6 +101,26 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     expect(item!.ratingKey).toBe(fixtures.showRatingKey);
   });
 
+  it("getImageBytes returns image bytes for a show's thumb", async () => {
+    const result = await client.getImageBytes({
+      ratingKey: fixtures.showRatingKey,
+    });
+    expect(result.bytes.byteLength).toBeGreaterThan(0);
+    expect(result.mimeType).toMatch(/^image\//);
+    // Header sniff: JPEG starts with FFD8FF, PNG with 89504E47.
+    const head = result.bytes.subarray(0, 4).toString("hex").toUpperCase();
+    expect(head.startsWith("FFD8FF") || head.startsWith("89504E47")).toBe(true);
+  });
+
+  it("getImageBytes via transcode honors max_width", async () => {
+    const result = await client.getImageBytes({
+      ratingKey: fixtures.showRatingKey,
+      maxWidth: 200,
+    });
+    expect(result.bytes.byteLength).toBeGreaterThan(0);
+    expect(result.mimeType).toMatch(/^image\//);
+  });
+
   it("getChildren returns at least one child for a show", async () => {
     const children = (await client.getChildren(
       fixtures.showRatingKey,

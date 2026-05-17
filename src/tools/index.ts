@@ -7,6 +7,7 @@ import type { PlexClient } from "../plex.js";
 import { registerAdminTools } from "./admin.js";
 import { registerDiscoveryTools } from "./discovery.js";
 import { registerHubsTools } from "./hubs.js";
+import { registerImageTools } from "./images.js";
 import { registerPlaybackTools } from "./playback.js";
 import { registerPlaylistsTools } from "./playlists.js";
 import { registerSessionsTools } from "./sessions.js";
@@ -18,4 +19,5 @@ export function registerTools(server: McpServer, plex: PlexClient): void {
   registerPlaylistsTools(server, plex);
   registerHubsTools(server, plex);
   registerAdminTools(server, plex);
+  registerImageTools(server, plex);
 }
