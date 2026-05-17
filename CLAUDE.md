@@ -36,6 +36,10 @@ what's next.
   doc links, gotchas we've hit (pagination pairing, `/:/scrobble` empty
   responses, `type` integer codes), and rough endpoint shapes for
   capabilities we haven't built yet. Read this before adding new tools.
+- `docs/CHATGPT-APPS-SDK.md` — future-work spec for making plex-mcp
+  consumable from a ChatGPT account (OAuth 2.1 protected-resource
+  setup, tool annotation hints, optional UI widgets, infrastructure
+  choices). Not started; phased plan inside.
 - `.githooks/pre-commit` — gitleaks + PII pattern scan.
 - `.gitleaks.toml` — secret-scanning config.
 
