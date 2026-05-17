@@ -4,7 +4,10 @@
 cert + BYO modes on the HTTP transport. New env vars MCP_TLS,
 MCP_TLS_DIR, MCP_TLS_SAN, MCP_TLS_CN, MCP_TLS_DAYS, MCP_TLS_CERT_FILE,
 MCP_TLS_KEY_FILE — see README "Enabling HTTPS". Stays opt-in; existing
-http://carldog-nas:3001/mcp deployment unaffected without a redeploy.)
+http://carldog-nas:3001/mcp deployment unaffected without a redeploy.
+Also captured ChatGPT Apps SDK alignment plan in
+docs/CHATGPT-APPS-SDK.md for future pickup — OAuth 2.1, tool
+annotations, optional widgets, infrastructure choices.)
 
 ## Phase
 
@@ -168,6 +171,18 @@ downloader-mcp.
   beyond LAN.
 
 ## Next
+
+- **ChatGPT Apps SDK alignment — spec'd, not started.** See
+  [docs/CHATGPT-APPS-SDK.md](docs/CHATGPT-APPS-SDK.md) for the full
+  punch list. TL;DR: ChatGPT cannot consume plex-mcp today because
+  (1) the server isn't internet-reachable and (2) it has no OAuth
+  2.1 protected-resource setup. Phased plan inside the doc; Phase 1
+  (tool annotation hints: `readOnlyHint` / `destructiveHint` /
+  `openWorldHint`) is the cheap independent win that benefits any
+  MCP client and can ship without the infra work. Phases 2–4 cover
+  OAuth middleware in plex-mcp, Cloudflare Tunnel + Auth0 (or
+  self-hosted IdP), and end-to-end ChatGPT dev-mode verification.
+  Total estimated effort ~week of evening time, distributed.
 
 - **v0.7 in flight (2026-05-13).**
   - **Shipped:** `plex_split_item` + `plex_merge_items` (commit
