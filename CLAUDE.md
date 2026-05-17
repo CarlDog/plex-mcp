@@ -80,6 +80,13 @@ The same image supports two transports, selected at start time:
   Per-session McpServer instances are created via the `createServer()`
   factory; the shared `PlexClient` is module-scope.
 
+  HTTPS is opt-in via `src/tls.ts`. Resolution order at startup:
+  `MCP_TLS_CERT_FILE`+`KEY_FILE` (BYO) → `MCP_TLS=auto` (self-managed
+  ECDSA P-256 cert under `MCP_TLS_DIR`, regenerated when <30 days
+  remain) → plain HTTP. Server logs the cert's SHA-256 fingerprint
+  and `notAfter` on startup. See README's "Enabling HTTPS" for the
+  full env-var matrix.
+
 The two modes are mutually exclusive in a given process.
 
 ## Common Commands

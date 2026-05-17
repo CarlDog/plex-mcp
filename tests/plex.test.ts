@@ -435,9 +435,9 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       }
 
       await client.unmatch(fixtures.showRatingKey);
-      const afterUnmatch = (await client.getItem(
-        fixtures.showRatingKey,
-      )) as { guid?: string };
+      const afterUnmatch = (await client.getItem(fixtures.showRatingKey)) as {
+        guid?: string;
+      };
       // After unmatch, the agent-derived GUID should be gone or
       // replaced with a local:// placeholder.
       expect(afterUnmatch.guid !== originalGuid).toBe(true);
@@ -447,9 +447,9 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
         originalGuid,
         originalTitle,
       );
-      const afterRestore = (await client.getItem(
-        fixtures.showRatingKey,
-      )) as { guid?: string };
+      const afterRestore = (await client.getItem(fixtures.showRatingKey)) as {
+        guid?: string;
+      };
       expect(afterRestore.guid).toBe(originalGuid);
     });
   });

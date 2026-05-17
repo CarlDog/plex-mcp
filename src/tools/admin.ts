@@ -132,32 +132,29 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
           ),
       },
     },
-    withLogging(
-      "plex_edit_metadata",
-      async ({ rating_key, fields, lock }) => {
-        // Translate snake_case → camelCase for Plex's API.
-        const plexFields: Record<string, string | number> = {};
-        if (fields.title !== undefined) plexFields.title = fields.title;
-        if (fields.title_sort !== undefined)
-          plexFields.titleSort = fields.title_sort;
-        if (fields.summary !== undefined) plexFields.summary = fields.summary;
-        if (fields.year !== undefined) plexFields.year = fields.year;
-        if (fields.originally_available_at !== undefined)
-          plexFields.originallyAvailableAt = fields.originally_available_at;
-        if (fields.content_rating !== undefined)
-          plexFields.contentRating = fields.content_rating;
-        if (fields.studio !== undefined) plexFields.studio = fields.studio;
-        if (fields.tagline !== undefined) plexFields.tagline = fields.tagline;
+    withLogging("plex_edit_metadata", async ({ rating_key, fields, lock }) => {
+      // Translate snake_case → camelCase for Plex's API.
+      const plexFields: Record<string, string | number> = {};
+      if (fields.title !== undefined) plexFields.title = fields.title;
+      if (fields.title_sort !== undefined)
+        plexFields.titleSort = fields.title_sort;
+      if (fields.summary !== undefined) plexFields.summary = fields.summary;
+      if (fields.year !== undefined) plexFields.year = fields.year;
+      if (fields.originally_available_at !== undefined)
+        plexFields.originallyAvailableAt = fields.originally_available_at;
+      if (fields.content_rating !== undefined)
+        plexFields.contentRating = fields.content_rating;
+      if (fields.studio !== undefined) plexFields.studio = fields.studio;
+      if (fields.tagline !== undefined) plexFields.tagline = fields.tagline;
 
-        const effectiveLock = lock ?? true;
-        await plex.editMetadata(rating_key, plexFields, effectiveLock);
-        return asText({
-          updated: Object.keys(plexFields),
-          rating_key,
-          locked: effectiveLock,
-        });
-      },
-    ),
+      const effectiveLock = lock ?? true;
+      await plex.editMetadata(rating_key, plexFields, effectiveLock);
+      return asText({
+        updated: Object.keys(plexFields),
+        rating_key,
+        locked: effectiveLock,
+      });
+    }),
   );
 
   server.registerTool(
