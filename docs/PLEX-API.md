@@ -159,6 +159,33 @@ Recipe for safely re-grouping a split-then-re-matched item:
 3. For items that should keep the original GUID (e.g. correctly-bound
    variants), `plex_merge_items` explicitly to consolidate.
 
+### `/photo/:/transcode` rejects width-only or height-only requests
+
+The image-resize endpoint takes `url=` (a relative path to the
+source image), `width=`, and `height=`. Sending only one dimension
+returns `400 Bad Request` — the resampler needs both bounding
+constraints. When the caller has only one (e.g. `max_width=400`
+with no max_height), mirror the missing dimension to the same value
+and let Plex's resampler preserve aspect ratio internally. Include
+`minSize=1` + `upscale=0` per python-plexapi's defaults.
+
+`PlexClient.getImageBytes` handles this automatically:
+
+```
+const dim = String(args.maxWidth ?? args.maxHeight);
+const params = {
+  url: relativeUrl,
+  width: args.maxWidth ? String(args.maxWidth) : dim,
+  height: args.maxHeight ? String(args.maxHeight) : dim,
+  minSize: "1",
+  upscale: "0",
+};
+```
+
+Without this mirror, calls like `plex_get_image(rating_key, max_width=400)`
+fail with a `400 Bad Request` from the transcoder. Discovered during
+the v0.8 `plex_get_image` smoke test (2026-05-17).
+
 ### Hidden flag has two states; `TESTING` sections are scratch space
 
 `plex_list_libraries` returns sections with a `hidden` field that's
@@ -203,6 +230,8 @@ user explicitly asks otherwise. The Plex API doesn't expose a
 | `plex_refresh_section` | `GET /library/sections/{id}/refresh[?force=1]`                        | Empty 200 — async on server; `force=1` deep-rescans every item        |
 | `plex_split_item`      | `PUT /library/metadata/{key}/split`                                   | Empty 200 — all-or-nothing; splits into N items per Media variant     |
 | `plex_merge_items`     | `PUT /library/metadata/{key}/merge?ids=<csv>`                         | Empty 200 — sources absorbed into target; target's rk/GUID survive    |
+| `plex_get_image`       | `GET {item.thumb/art/banner}` or `GET /photo/:/transcode?url=…&width=&height=` | Returns binary; Accept: image/\* (not JSON). Transcode needs BOTH width AND height — see gotcha above. 4 MiB raw cap. |
+| `plex_save_image`      | Same fetch path as `plex_get_image`                                    | Writes bytes to `${MCP_IMAGE_SAVE_DIR}/${filename}` inside the container instead of returning them. Default save dir `/data/images/`. |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.
