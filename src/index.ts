@@ -38,7 +38,7 @@ function createServer(): McpServer {
   const server = new McpServer(
     {
       name: "plex-mcp",
-      version: "0.7.0",
+      version: "0.7.1",
     },
     {
       instructions: INSTRUCTIONS,

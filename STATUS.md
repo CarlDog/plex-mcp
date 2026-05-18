@@ -1,13 +1,16 @@
 # Status
 
-**Last updated:** 2026-05-17 (v0.8 third item: ChatGPT Apps SDK
-Phase 1 — tool annotation hints added across all 30 tools. Each
-registration now carries readOnlyHint / destructiveHint /
-idempotentHint / openWorldHint per the MCP spec + Apps SDK
-metadata guide. Benefits any client (not just ChatGPT) by giving
-the model better tool-selection signal. Earlier today: plex_get_item
-minimal/fields projection + plex_get_image + v0.7.0 tagged
-consolidating split+merge + opt-in HTTPS + ChatGPT alignment spec.)
+**Last updated:** 2026-05-17 (v0.7.1 release — patch tag that
+backfills GHCR with the lockfile-fix image so a semver pin works
+again. The v0.7.0 tag's CI build had failed silently for a week due
+to orphaned @rolldown/@emnapi references in the lockfile;
+docker-publish has been red on every push since 2026-05-11. v0.7.1
+also bundles the three v0.8 items already on main: plex_get_image,
+plex_get_item minimal/fields projection, MCP tool annotation hints.
+Slight semver fudge — those are features, not pure patch — but
+preserved for simplicity over a release-branch backport. Earlier
+today: v0.7.0 tagged consolidating split+merge + opt-in HTTPS +
+ChatGPT alignment spec.)
 
 ## Phase
 
@@ -148,6 +151,20 @@ downloader-mcp.
     incremental call without `force=1` (deep refresh is expensive
     against live Plex). fields projection asserts only requested
     keys appear in each item.
+
+- **v0.7.1 patch release (2026-05-17).** Backfills GHCR with a
+  working semver image. The v0.7.0 tag's docker-publish build
+  failed (lockfile had orphaned `@rolldown/binding-*` references
+  declaring nested `@emnapi/core@1.10.0` / `@emnapi/runtime@1.10.0`
+  deps without their resolved node_modules entries; `npm install`
+  tolerated it, `npm ci` rejected it). Fix: `rm -rf node_modules
+  package-lock.json && npm install` to regenerate from scratch.
+  Verified inside the canonical node:22-alpine + npm 10
+  environment. Bundles the three v0.8 items already on main —
+  plex_get_image, plex_get_item minimal/fields, tool annotations
+  — because the lockfile was regenerated from current state, not
+  cherry-picked back to v0.7.0. Slight semver fudge (features in
+  a patch tag) accepted as the simpler path for a personal repo.
 
 - **v0.8 in flight (2026-05-17).** Three items shipped so far.
   Tool count 29 → 30 (one new tool; the second + third items
