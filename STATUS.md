@@ -1,16 +1,13 @@
 # Status
 
-**Last updated:** 2026-05-17 (v0.7.1 release — patch tag that
-backfills GHCR with the lockfile-fix image so a semver pin works
-again. The v0.7.0 tag's CI build had failed silently for a week due
-to orphaned @rolldown/@emnapi references in the lockfile;
-docker-publish has been red on every push since 2026-05-11. v0.7.1
-also bundles the three v0.8 items already on main: plex_get_image,
-plex_get_item minimal/fields projection, MCP tool annotation hints.
-Slight semver fudge — those are features, not pure patch — but
-preserved for simplicity over a release-branch backport. Earlier
-today: v0.7.0 tagged consolidating split+merge + opt-in HTTPS +
-ChatGPT alignment spec.)
+**Last updated:** 2026-05-17 (v0.8 fourth item: plex_save_image —
+companion to plex_get_image that writes the bytes to disk under
+MCP_IMAGE_SAVE_DIR (default /data/images/) instead of returning an
+image content block. Bridges the "Plex item → file on disk →
+downstream pipeline (ImageMagick composite, filesystem-mcp
+consumer, etc.)" workflow without a vision render in the loop.
+Earlier today: v0.7.1 released, v0.7.0 tagged, opt-in HTTPS, ChatGPT
+alignment spec.)
 
 ## Phase
 
@@ -166,9 +163,28 @@ downloader-mcp.
   cherry-picked back to v0.7.0. Slight semver fudge (features in
   a patch tag) accepted as the simpler path for a personal repo.
 
-- **v0.8 in flight (2026-05-17).** Three items shipped so far.
-  Tool count 29 → 30 (one new tool; the second + third items
+- **v0.8 in flight (2026-05-17).** Four items shipped so far.
+  Tool count 29 → 31 (two new tools; the third + fourth items
   enhance existing tools or all tools collectively).
+  - **`plex_save_image`** — companion to plex_get_image. Same input
+    surface (rating_key / image_url / image_type / max_width /
+    max_height) plus a required `filename` (basename only —
+    rejects '/', '\\', '..', leading '.'). Writes bytes to
+    `${MCP_IMAGE_SAVE_DIR}/${filename}` inside the container
+    (default `/data/images/`). Returns `{path, bytes_written,
+    mime_type}` as text — NOT an image content block. The bridge
+    for "no human in the loop" pipelines that need the bytes at a
+    file path (ImageMagick composite, filesystem-mcp consumer,
+    etc.) rather than rendered inline for a vision model.
+    Operator bind-mounts the host directory they want files in
+    onto `/data/images/` (or sets `MCP_IMAGE_SAVE_DIR` to a
+    different in-container path and mounts there). docker-compose
+    gained a commented `/volume1/Media/_mcp-scratch:/data/images`
+    example as the natural bridge to filesystem-mcp's `/media`
+    root. Tests added (40 → 42): tmpdir-scoped save round-trip
+    (asserts file written + magic-byte sniff matches JPEG/PNG) +
+    traversal-rejection guard.
+
   - **ChatGPT Apps SDK Phase 1: tool annotation hints on every
     tool.** Per the spec at docs/CHATGPT-APPS-SDK.md, each tool's
     `registerTool` config now carries an `annotations` block with

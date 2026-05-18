@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { log } from "./log.js";
 
 export interface PlexConfig {
@@ -644,6 +646,74 @@ export class PlexClient {
    * Not covered by an automated round-trip test: destructive on
    * shared real Plex. Verify manually against real use cases.
    */
+  /**
+   * Fetch an image (same resolution as getImageBytes) and write it
+   * to disk under MCP_IMAGE_SAVE_DIR (default /data/images).
+   *
+   * Operators bind-mount the host directory they want images to
+   * land in onto MCP_IMAGE_SAVE_DIR inside the container. Files
+   * become reachable from outside via that bind mount.
+   *
+   * `filename` is a basename — no path separators, no traversal
+   * sequences. Defense against an LLM that's been tricked into
+   * passing "../../etc/passwd" or similar.
+   */
+  async saveImage(args: {
+    ratingKey?: string;
+    imageUrl?: string;
+    imageType?: "thumb" | "art" | "banner" | "squareArt" | "clearLogo";
+    maxWidth?: number;
+    maxHeight?: number;
+    filename: string;
+  }): Promise<{ path: string; bytes_written: number; mime_type: string }> {
+    if (!args.filename) {
+      throw new Error("saveImage: filename is required");
+    }
+    if (
+      args.filename.includes("/") ||
+      args.filename.includes("\\") ||
+      args.filename.includes("..") ||
+      args.filename.startsWith(".")
+    ) {
+      throw new Error(
+        `saveImage: filename must be a basename (no '/', '\\', '..', or leading '.'); got ${JSON.stringify(args.filename)}`,
+      );
+    }
+    const baseDir = process.env.MCP_IMAGE_SAVE_DIR ?? "/data/images";
+    const { bytes, mimeType } = await this.getImageBytes({
+      ratingKey: args.ratingKey,
+      imageUrl: args.imageUrl,
+      imageType: args.imageType,
+      maxWidth: args.maxWidth,
+      maxHeight: args.maxHeight,
+    });
+    try {
+      mkdirSync(baseDir, { recursive: true });
+    } catch (err) {
+      throw new Error(
+        `saveImage: could not create save dir ${baseDir}: ${(err as Error).message}. Set MCP_IMAGE_SAVE_DIR to a writable path.`,
+      );
+    }
+    const path = join(baseDir, args.filename);
+    try {
+      writeFileSync(path, bytes);
+    } catch (err) {
+      throw new Error(
+        `saveImage: could not write ${path}: ${(err as Error).message}`,
+      );
+    }
+    log.info("plex", "image saved", {
+      path,
+      bytes: bytes.byteLength,
+      mime: mimeType,
+    });
+    return {
+      path,
+      bytes_written: bytes.byteLength,
+      mime_type: mimeType,
+    };
+  }
+
   async mergeItems(
     intoRatingKey: string,
     sourceRatingKeys: string[],

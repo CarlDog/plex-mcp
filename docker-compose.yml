@@ -29,7 +29,12 @@ services:
     #   # Self-managed: persist cert across restarts. Optional but recommended.
     #   - ./certs:/data/certs
     #   # BYO: read-only mount of your own cert + key.
-    #   # - ./certs:/certs:ro
+    #   - ./certs:/certs:ro
+    #   # plex_save_image output directory. Mount any host path here;
+    #   # the tool writes to /data/images/<filename> inside the
+    #   # container. Override the in-container path with
+    #   # MCP_IMAGE_SAVE_DIR if you want it elsewhere.
+    #   - /volume1/Media/_mcp-scratch:/data/images
     extra_hosts:
       # Lets the container reach Plex when it's running on the same host.
       # Use PLEX_URL=http://host.docker.internal:32400 in that case.

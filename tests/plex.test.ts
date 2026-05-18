@@ -170,6 +170,51 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     expect(result.mimeType).toMatch(/^image\//);
   });
 
+  it("saveImage writes bytes to MCP_IMAGE_SAVE_DIR with magic-byte sniff", async () => {
+    const { mkdtempSync, readFileSync, rmSync, existsSync } =
+      await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join: pathJoin } = await import("node:path");
+    const dir = mkdtempSync(pathJoin(tmpdir(), "plex-mcp-save-"));
+    const prev = process.env.MCP_IMAGE_SAVE_DIR;
+    process.env.MCP_IMAGE_SAVE_DIR = dir;
+    try {
+      const result = await client.saveImage({
+        ratingKey: fixtures.showRatingKey,
+        filename: "fixture.jpg",
+        maxWidth: 200,
+      });
+      expect(result.path).toBe(pathJoin(dir, "fixture.jpg"));
+      expect(result.bytes_written).toBeGreaterThan(0);
+      expect(result.mime_type).toMatch(/^image\//);
+      expect(existsSync(result.path)).toBe(true);
+      const bytes = readFileSync(result.path);
+      const head = bytes.subarray(0, 4).toString("hex").toUpperCase();
+      expect(head.startsWith("FFD8FF") || head.startsWith("89504E47")).toBe(
+        true,
+      );
+    } finally {
+      if (prev === undefined) delete process.env.MCP_IMAGE_SAVE_DIR;
+      else process.env.MCP_IMAGE_SAVE_DIR = prev;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("saveImage rejects traversal filenames", async () => {
+    await expect(
+      client.saveImage({
+        ratingKey: fixtures.showRatingKey,
+        filename: "../escape.jpg",
+      }),
+    ).rejects.toThrow(/basename/);
+    await expect(
+      client.saveImage({
+        ratingKey: fixtures.showRatingKey,
+        filename: "sub/foo.jpg",
+      }),
+    ).rejects.toThrow(/basename/);
+  });
+
   it("getChildren returns at least one child for a show", async () => {
     const children = (await client.getChildren(
       fixtures.showRatingKey,
