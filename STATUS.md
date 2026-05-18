@@ -1,13 +1,16 @@
 # Status
 
-**Last updated:** 2026-05-17 (v0.8 fourth item: plex_save_image —
-companion to plex_get_image that writes the bytes to disk under
-MCP_IMAGE_SAVE_DIR (default /data/images/) instead of returning an
-image content block. Bridges the "Plex item → file on disk →
-downstream pipeline (ImageMagick composite, filesystem-mcp
-consumer, etc.)" workflow without a vision render in the loop.
-Earlier today: v0.7.1 released, v0.7.0 tagged, opt-in HTTPS, ChatGPT
-alignment spec.)
+**Last updated:** 2026-05-18 (deploy verified end-to-end; bind
+mount `/volume1/Media/_mcp-scratch:/data/images:rw` active on the
+stack; `plex_save_image → fs_stat` round-trip proved with a real
+Young Guns II poster (240,332 bytes). PLEX-API.md gained the
+`/photo/:/transcode` width+height gotcha + an endpoints-table row
+each for plex_get_image and plex_save_image. v0.8 queue reordered:
+plex_upload_poster moved up to next-to-ship because today's
+poster-workflow handoff with Claude Desktop confirms the round-trip
+needs an upload side to complete the loop. Yesterday's work (v0.7.0
+release + v0.7.1 patch + plex_get_image + plex_get_item projection +
+tool annotations + plex_save_image) all live and serving.)
 
 ## Phase
 
@@ -315,17 +318,40 @@ downloader-mcp.
 
 ## Next
 
-- **ChatGPT Apps SDK alignment — spec'd, not started.** See
-  [docs/CHATGPT-APPS-SDK.md](docs/CHATGPT-APPS-SDK.md) for the full
-  punch list. TL;DR: ChatGPT cannot consume plex-mcp today because
-  (1) the server isn't internet-reachable and (2) it has no OAuth
-  2.1 protected-resource setup. Phased plan inside the doc; Phase 1
-  (tool annotation hints: `readOnlyHint` / `destructiveHint` /
-  `openWorldHint`) is the cheap independent win that benefits any
-  MCP client and can ship without the infra work. Phases 2–4 cover
-  OAuth middleware in plex-mcp, Cloudflare Tunnel + Auth0 (or
-  self-hosted IdP), and end-to-end ChatGPT dev-mode verification.
-  Total estimated effort ~week of evening time, distributed.
+- **`plex_upload_poster` (close-the-loop write side).** Elevated
+  from the v0.8 poster-management queue because today's poster
+  design handoff with Claude Desktop confirms the round-trip needs
+  an upload side. Plex API: `POST /library/metadata/{rk}/posters`
+  with either `url=<external>` (Plex fetches) or a binary body (we
+  POST the bytes ourselves). Plex stores as a new candidate and
+  optionally makes it active. For the file-pipeline case (poster
+  saved at `/data/images/foo.jpg` by plex_save_image, processed by
+  a local compositor, ready to push back), the binary-body path is
+  natural — read the file inside the container, POST to Plex,
+  return the updated `selected` poster reference.
+  Cross-validate against python-plexapi's `mixins/poster.py` for
+  exact endpoint + headers before shipping. Annotations:
+  `SAFE_WRITE_ANNOTATIONS` (mutating; not idempotent — each call
+  creates a new candidate).
+
+- **ChatGPT Apps SDK alignment — Phase 1 done, Phases 2–4 not
+  started.** See [docs/CHATGPT-APPS-SDK.md](docs/CHATGPT-APPS-SDK.md)
+  for the full punch list. TL;DR: ChatGPT cannot consume plex-mcp
+  today because (1) the server isn't internet-reachable and (2) it
+  has no OAuth 2.1 protected-resource setup. Phase 1 (tool
+  annotation hints) shipped 2026-05-17. Phases 2–4 cover OAuth
+  middleware in plex-mcp, Cloudflare Tunnel + Auth0 (or self-hosted
+  IdP), and end-to-end ChatGPT dev-mode verification. Total
+  estimated remaining effort ~week of evening time, distributed.
+
+- **Cross-MCP file-passing pattern is live.** plex_save_image →
+  `/data/images/` (= host `/volume1/Media/_mcp-scratch/`) →
+  filesystem-mcp `/media/_mcp-scratch/`. Reusable for any future
+  producer-consumer MCP workflow on this host. Pattern captured in
+  OC memory (id `43abc163`); when extending to a second producer
+  (servarr-mcp → filesystem-mcp, downloader-mcp → filesystem-mcp),
+  the convention is a dedicated subdir under `/volume1/Media/`
+  (e.g. `_arr-scratch/`).
 
 - **Other v0.8 / v0.9 candidates carried from v0.7 queue.**
   Endpoint shapes confirmed against python-plexapi 2026-05-13
