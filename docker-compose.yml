@@ -25,16 +25,19 @@ services:
       #
       # When TLS is on, switch the healthcheck below to wget --no-check-certificate
       # against https://localhost:3000/health.
-    # volumes:
-    #   # Self-managed: persist cert across restarts. Optional but recommended.
-    #   - ./certs:/data/certs
-    #   # BYO: read-only mount of your own cert + key.
-    #   - ./certs:/certs:ro
-    #   # plex_save_image output directory. Mount any host path here;
-    #   # the tool writes to /data/images/<filename> inside the
-    #   # container. Override the in-container path with
-    #   # MCP_IMAGE_SAVE_DIR if you want it elsewhere.
-    #   - /volume1/Media/_mcp-scratch:/data/images
+    volumes:
+      # plex_save_image output directory. Files written under
+      # /data/images inside the container land at the host path
+      # below, which is also exposed by filesystem-mcp at
+      # /media/_mcp-scratch — closing the loop for the
+      # plex_search → plex_save_image → filesystem-mcp pipeline.
+      # Override the in-container path with MCP_IMAGE_SAVE_DIR if
+      # you want it elsewhere.
+      - /volume1/Media/_mcp-scratch:/data/images
+      # Optional HTTPS cert volume (commented). Self-managed persists
+      # across restarts; BYO is read-only.
+      # - ./certs:/data/certs
+      # - ./certs:/certs:ro
     extra_hosts:
       # Lets the container reach Plex when it's running on the same host.
       # Use PLEX_URL=http://host.docker.internal:32400 in that case.
