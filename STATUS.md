@@ -393,6 +393,57 @@ downloader-mcp.
     preceded within N tool calls by a `get_matches(ratingKey=X)`
     that returned `{guid: G}` should pass without a prompt. Two
     false-positive denials documented during the audit cleanup.
+- **Collections support (captured 2026-06-07 from the "CarlDog's
+    Favorites" backup-copy session).** Task: enumerate a Movies
+    collection's members + their on-disk paths to copy the folders to a
+    second NAS. **No current tool can list a collection or its members**
+    — this turned a one-call job into a direct-Plex-API workaround
+    script. The gap, with proposed fixes (endpoints cross-validated
+    against pkkid `library.py` / `collection.py`):
+    1. **`plex_list_collections(section_id)`** —
+       `GET /library/sections/{id}/collections`. Mirrors
+       `plex_list_playlists` exactly (thin wrapper; add
+       `listCollections()` to `PlexClient`, register in
+       `tools/discovery.ts`). Returns each collection's `ratingKey`,
+       `title`, `childCount`. Closes "find a collection by name."
+    2. **`plex_get_collection_children(rating_key)`** —
+       `GET /library/collections/{ratingKey}/children`. Mirrors
+       `plex_get_playlist_items`. The direct "list members" call.
+       ⚠️ Root cause of the gap: a collection's ratingKey **404s** on
+       `/library/metadata/{key}` and `/library/metadata/{key}/children`
+       — which is exactly what `plex_get_item` and `plex_get_children`
+       hit (`plex.ts` `getItem`/`getChildren`). Collections live under
+       `/library/collections/`, a different path. Should honor the
+       `fields` / `minimal` projection — members carry full movie
+       payloads, but the copy use case only needed `Media.Part.file`.
+    3. **Collection discovery via search.** `plex_search` uses
+       `/search`, which omits collections entirely (verified: exact
+       title returned `[]`). `docs/PLEX-API.md` already documents the
+       richer `GET /hubs/search?query=&includeCollections=1&includeExternalMedia=1`.
+       Either upgrade `plex_search` to `/hubs/search` or add
+       `plex_hub_search` so collections (and other hub types) are
+       findable by name.
+    4. **(Optional, lower priority) `collection=` filter on
+       `plex_browse`.** `GET /library/sections/{id}/all?collection={rk}`
+       also returns members — a one-line add to `browse()`'s `params`.
+       Same change would naturally generalize to other section filters
+       (genre / year / unwatched), so weigh as a small filter-param
+       feature rather than a collections-only fix.
+    - Partial path that exists today: `plex_related(rating_key)`
+      returns a "From this collection" hub, so item→collection is
+      reachable — but there is no collection→members path.
+    - **DX bug observed:** `plex_browse`'s `fields` projection
+      silently drops requested keys that aren't in the section-listing
+      payload (e.g. `Collection`, which is full-metadata-only), with no
+      signal — so "this movie has no collections" is indistinguishable
+      from "the field was never present at this layer." Document which
+      fields live at the browse layer vs. the `get_item` layer; consider
+      noting unavailable keys in the response.
+    - **Doc follow-up:** add the two collection endpoints
+      (`/library/sections/{id}/collections`,
+      `/library/collections/{rk}/children`) to `docs/PLEX-API.md`'s
+      "capabilities we haven't built yet" table.
+
 - **v0.8 candidates (captured 2026-05-11 from WWE PPV
   consolidation + Panty & Stocking multi-episode rename
   session).** Concrete tool / doc gaps observed in actual use:
