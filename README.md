@@ -1,5 +1,10 @@
 # plex-mcp
 
+<!-- fleet-confidence -->
+![code confidence](https://img.shields.io/badge/code_confidence-fair-orange) <sub>· `claude-opus-4-8[1m]` · 2026-07-07 · [details](https://github.com/CarlDog/plex-mcp/issues/1)</sub>
+<!-- /fleet-confidence -->
+
+
 An [MCP](https://modelcontextprotocol.io) server for
 [Plex Media Server](https://www.plex.tv/), packaged as a Docker
 container. Lets an MCP client (Claude Desktop, etc.) browse and search
