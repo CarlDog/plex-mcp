@@ -629,24 +629,6 @@ export class PlexClient {
   }
 
   /**
-   * Merge other Plex items INTO the target item. The target's
-   * ratingKey, GUID, and metadata survive; the listed sources are
-   * absorbed (their ratingKeys disappear, their Media variants
-   * become Media variants of the target).
-   *
-   * Use case: clean up duplicates from differently-named release
-   * directories (the audit's WWE Royal Rumble 2026 triplicate at
-   * 206822 / 207232 / 207233). Routing through merge sidesteps the
-   * apply_match hook false-positives that blocked the re-match
-   * approach.
-   *
-   * Reversible via `splitItem(thisRatingKey)` — but the resulting
-   * split items take new ratingKeys (not the originals). Empty 200.
-   *
-   * Not covered by an automated round-trip test: destructive on
-   * shared real Plex. Verify manually against real use cases.
-   */
-  /**
    * Fetch an image (same resolution as getImageBytes) and write it
    * to disk under MCP_IMAGE_SAVE_DIR (default /data/images).
    *
@@ -714,6 +696,24 @@ export class PlexClient {
     };
   }
 
+  /**
+   * Merge other Plex items INTO the target item. The target's
+   * ratingKey, GUID, and metadata survive; the listed sources are
+   * absorbed (their ratingKeys disappear, their Media variants
+   * become Media variants of the target).
+   *
+   * Use case: clean up duplicates from differently-named release
+   * directories (the audit's WWE Royal Rumble 2026 triplicate at
+   * 206822 / 207232 / 207233). Routing through merge sidesteps the
+   * apply_match hook false-positives that blocked the re-match
+   * approach.
+   *
+   * Reversible via `splitItem(thisRatingKey)` — but the resulting
+   * split items take new ratingKeys (not the originals). Empty 200.
+   *
+   * Not covered by an automated round-trip test: destructive on
+   * shared real Plex. Verify manually against real use cases.
+   */
   async mergeItems(
     intoRatingKey: string,
     sourceRatingKeys: string[],
