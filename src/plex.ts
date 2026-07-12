@@ -823,6 +823,16 @@ export class PlexClient {
     params: Record<string, string> = {},
   ): Promise<{ bytes: Buffer; mimeType: string }> {
     const url = new URL(path, this.config.url);
+    // Same-origin choke point: `path` may originate from tool input
+    // (image_url). A protocol-relative ("//host/x"), backslash
+    // ("/\\host/x"), or absolute URL would resolve off-server and
+    // leak X-Plex-Token to an arbitrary host. The tool layer rejects
+    // those shapes too; this assertion is the defense in depth.
+    if (url.origin !== new URL(this.config.url).origin) {
+      throw new Error(
+        `fetchBinary: refusing off-server URL (resolved host ${url.host} != Plex server); image paths must be relative to the configured Plex server`,
+      );
+    }
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }

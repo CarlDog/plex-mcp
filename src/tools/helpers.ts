@@ -16,6 +16,32 @@ export const asImage = (bytes: Buffer, mimeType: string) => ({
   ],
 });
 
+/**
+ * Validate that a caller-supplied image_url is a same-server relative
+ * Plex path. Rejects absolute URLs AND protocol-relative forms:
+ * `new URL("//attacker.tld/x", base)` resolves to attacker.tld, and
+ * WHATWG URL parsing treats a backslash like a forward slash for
+ * http(s), so "/\\attacker.tld/x" does too. Either would leak the
+ * X-Plex-Token to an arbitrary host via fetchBinary.
+ *
+ * Defense in depth: PlexClient.fetchBinary also asserts the resolved
+ * URL stays on the configured Plex origin.
+ */
+export function assertRelativePlexPath(
+  toolName: string,
+  imageUrl: string,
+): void {
+  if (
+    !imageUrl.startsWith("/") ||
+    imageUrl.startsWith("//") ||
+    imageUrl.startsWith("/\\")
+  ) {
+    throw new Error(
+      `${toolName}: image_url must be a relative Plex path starting with '/' (absolute and protocol-relative URLs are not allowed)`,
+    );
+  }
+}
+
 // Per the MCP spec + ChatGPT Apps SDK metadata guide
 // (docs/CHATGPT-APPS-SDK.md), tool annotations are hints to the
 // client about a tool's behavior. They aren't enforced — clients
