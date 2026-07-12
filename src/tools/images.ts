@@ -10,6 +10,7 @@ import {
   SAFE_WRITE_ANNOTATIONS,
   asImage,
   asText,
+  assertRelativePlexPath,
   withLogging,
 } from "./helpers.js";
 
@@ -64,10 +65,8 @@ export function registerImageTools(server: McpServer, plex: PlexClient): void {
             "plex_get_image: either rating_key or image_url must be provided",
           );
         }
-        if (image_url && !image_url.startsWith("/")) {
-          throw new Error(
-            "plex_get_image: image_url must be a relative Plex path starting with '/'",
-          );
+        if (image_url) {
+          assertRelativePlexPath("plex_get_image", image_url);
         }
         const { bytes, mimeType } = await plex.getImageBytes({
           ratingKey: rating_key,
@@ -144,10 +143,8 @@ export function registerImageTools(server: McpServer, plex: PlexClient): void {
             "plex_save_image: either rating_key or image_url must be provided",
           );
         }
-        if (image_url && !image_url.startsWith("/")) {
-          throw new Error(
-            "plex_save_image: image_url must be a relative Plex path starting with '/'",
-          );
+        if (image_url) {
+          assertRelativePlexPath("plex_save_image", image_url);
         }
         const result = await plex.saveImage({
           filename,

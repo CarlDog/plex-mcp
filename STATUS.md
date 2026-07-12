@@ -315,6 +315,19 @@ downloader-mcp.
   reworded — TLS encrypts in transit but doesn't authenticate
   callers; the bearer-token gap remains as future work if exposing
   beyond LAN.
+- **Security: image_url guard hardened against protocol-relative
+  URLs (fleet-review #1).** The tool-layer check
+  `image_url.startsWith("/")` accepted `//attacker.tld/x` (and the
+  WHATWG-URL backslash variant `/\attacker.tld/x`), which
+  `new URL(path, PLEX_URL)` resolves to an arbitrary host —
+  `fetchBinary` would then send `X-Plex-Token` there. Fixed at both
+  layers: shared `assertRelativePlexPath` helper in
+  `src/tools/helpers.ts` (used by `plex_get_image` +
+  `plex_save_image`) rejects `//` and `/\` prefixes, and
+  `PlexClient.fetchBinary` now asserts the resolved URL stays on the
+  configured Plex origin (single choke point). New non-networked
+  unit suite `tests/image-url-guard.test.ts` covers both layers and
+  runs in CI where the live-Plex integration suite skips.
 
 ## Next
 
