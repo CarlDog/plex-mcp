@@ -5,3 +5,6 @@ package-lock.json
 
 # Hand-crafted markdown — keep current formatting
 *.md
+
+# Fleet-canonical Dependabot config — keep byte-identical to the template
+.github/dependabot.yml
