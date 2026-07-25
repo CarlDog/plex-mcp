@@ -1,6 +1,7 @@
 {
   "name": "plex-mcp",
   "version": "0.7.1",
+  "license": "MIT",
   "description": "MCP server for Plex Media Server, packaged as a Docker container",
   "type": "module",
   "bin": {
