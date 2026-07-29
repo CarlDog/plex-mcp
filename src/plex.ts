@@ -271,8 +271,7 @@ export class PlexClient {
       `/library/metadata/${ratingKey}`,
     );
     const item = data.MediaContainer?.Metadata?.[0] as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     if (!item) return undefined;
 
     // Explicit field projection beats minimal mode if both are set.
@@ -674,6 +673,7 @@ export class PlexClient {
     } catch (err) {
       throw new Error(
         `saveImage: could not create save dir ${baseDir}: ${(err as Error).message}. Set MCP_IMAGE_SAVE_DIR to a writable path.`,
+        { cause: err },
       );
     }
     const path = join(baseDir, args.filename);
@@ -682,6 +682,7 @@ export class PlexClient {
     } catch (err) {
       throw new Error(
         `saveImage: could not write ${path}: ${(err as Error).message}`,
+        { cause: err },
       );
     }
     log.info("plex", "image saved", {

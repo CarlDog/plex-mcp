@@ -51,8 +51,7 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       limit: 1,
     });
     const firstShow = browseResult.items[0] as
-      | { ratingKey: string }
-      | undefined;
+      { ratingKey: string } | undefined;
     if (!firstShow) {
       throw new Error(
         `Test fixture: show-type section ${showLib.key} has no shows`,
@@ -61,8 +60,7 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
 
     const historyResult = await client.history({ limit: 1 });
     const recentEntry = historyResult.items[0] as
-      | { ratingKey: string }
-      | undefined;
+      { ratingKey: string } | undefined;
 
     fixtures = {
       showSectionId: showLib.key,
@@ -95,16 +93,14 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
 
   it("getItem returns the item with the requested rating_key", async () => {
     const item = (await client.getItem(fixtures.showRatingKey)) as
-      | { ratingKey: string }
-      | undefined;
+      { ratingKey: string } | undefined;
     expect(item).toBeDefined();
     expect(item!.ratingKey).toBe(fixtures.showRatingKey);
   });
 
   it("getItem with minimal=true drops bulky arrays but keeps Media.Part.file", async () => {
     const full = (await client.getItem(fixtures.showRatingKey)) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     const minimal = (await client.getItem(fixtures.showRatingKey, {
       minimal: true,
     })) as Record<string, unknown> | undefined;

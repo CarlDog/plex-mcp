@@ -328,6 +328,23 @@ downloader-mcp.
   configured Plex origin (single choke point). New non-networked
   unit suite `tests/image-url-guard.test.ts` covers both layers and
   runs in CI where the live-Plex integration suite skips.
+- **Dev-chain upgraded to eslint 10 + Dependabot #4's bumps applied
+  manually (2026-07-29).** eslint ^9 → ^10.8.0, @eslint/js → ^10.0.1,
+  eslint-config-prettier → ^10.1.8 (clears the npm-audit highs in the
+  dev-only eslint chain — minimatch/brace-expansion DoS), plus the
+  npm-dev group from Dependabot #4: prettier ^3.9.6 (its 3.9
+  formatting applied to src/plex.ts + tests/plex.test.ts — the reason
+  #4's CI failed, Dependabot bumps but never reformats), tsx ^4.23.1,
+  typescript-eslint ^8.65.0 (peer range already covers eslint 10),
+  vitest ^4.1.10. ESLint 10's new `preserve-caught-error` rule flagged
+  the two saveImage rethrows — fixed by attaching `{ cause: err }`
+  (messages unchanged). Also bumped @modelcontextprotocol/sdk ^1.30.0
+  + @hono/node-server transitive to 2.0.12 (same GHSA path-traversal
+  moderate portainer-mcp cleared as Dependabot #31 there). npm audit
+  now reports 0 vulnerabilities. Verified: lint + typecheck + build +
+  8/8 unit tests (42 live-Plex integration tests skip locally as
+  always). Runtime majors (express 5, undici 8, zod 4, TS 7) remain
+  deliberately deferred — see the closed npm-major PR #5.
 
 ## Next
 
