@@ -11,6 +11,20 @@ interface PlexResponse<T> {
   MediaContainer?: T & { size?: number };
 }
 
+const DEFAULT_IMAGE_MAX_BYTES = 4194304;
+
+/**
+ * Parse MCP_IMAGE_MAX_BYTES, falling back to the default for unset,
+ * empty-string, or non-numeric values. Some MCP hosts inject "" for a
+ * blank config field rather than leaving it unset — plain `?? default`
+ * lets that through, and parseInt("") is NaN, so every downstream size
+ * comparison silently no-ops and the cap stops applying.
+ */
+export function resolveImageMaxBytes(raw: string | undefined): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isNaN(parsed) ? DEFAULT_IMAGE_MAX_BYTES : parsed;
+}
+
 export class PlexClient {
   private machineIdentifier: string | undefined;
 
@@ -864,10 +878,7 @@ export class PlexClient {
       );
     }
 
-    const cap = Number.parseInt(
-      process.env.MCP_IMAGE_MAX_BYTES ?? "4194304",
-      10,
-    );
+    const cap = resolveImageMaxBytes(process.env.MCP_IMAGE_MAX_BYTES);
     const contentLength = res.headers.get("content-length");
     if (contentLength && Number.parseInt(contentLength, 10) > cap) {
       throw new Error(
