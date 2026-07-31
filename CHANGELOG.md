@@ -38,6 +38,11 @@ the work rather than after the fact.
 
 ### Fixed
 
+- `docker-compose.yml` (MCP-E02): the `volumes:` host path was a hardcoded
+  absolute NAS path with zero `${}` indirection, and `LOG_LEVEL` (already
+  read by `src/log.ts`) was never set at all. Now `${HOST_IMAGE_DIR:-./data/images}`
+  and `LOG_LEVEL: "${LOG_LEVEL:-info}"`, both Portainer-overridable without
+  a compose edit.
 - `MCP_IMAGE_MAX_BYTES=""` no longer silently disables the image size cap
   (empty string now normalizes to unset, same as a missing env var).
 - `npm ci` lockfile desync from orphaned `@rolldown/binding-*` /

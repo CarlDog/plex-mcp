@@ -10,6 +10,7 @@ services:
       MCP_PORT: "3000"
       PLEX_URL: "${PLEX_URL}"
       PLEX_TOKEN: "${PLEX_TOKEN}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
       # Optional HTTPS — pick ONE of the two modes below.
       #
       # (a) Self-managed cert (recommended for LAN-only deployment):
@@ -27,13 +28,14 @@ services:
       # against https://localhost:3000/health.
     volumes:
       # plex_save_image output directory. Files written under
-      # /data/images inside the container land at the host path
-      # below, which is also exposed by filesystem-mcp at
-      # /media/_mcp-scratch — closing the loop for the
-      # plex_search → plex_save_image → filesystem-mcp pipeline.
+      # /data/images inside the container land at HOST_IMAGE_DIR on
+      # the host — set it to /volume1/Media/_mcp-scratch to match
+      # filesystem-mcp's exposed /media/_mcp-scratch, closing the loop
+      # for the plex_search → plex_save_image → filesystem-mcp
+      # pipeline. Default below is relative, for local testing.
       # Override the in-container path with MCP_IMAGE_SAVE_DIR if
       # you want it elsewhere.
-      - /volume1/Media/_mcp-scratch:/data/images
+      - ${HOST_IMAGE_DIR:-./data/images}:/data/images
       # Optional HTTPS cert volume (commented). Self-managed persists
       # across restarts; BYO is read-only.
       # - ./certs:/data/certs

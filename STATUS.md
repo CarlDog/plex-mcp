@@ -389,6 +389,16 @@ downloader-mcp.
   fill its couple of genuine gaps — leaning toward the latter, this
   repo predates the convention and has working hand-rolled
   equivalents).
+- **MCP-E02 compose-parameterization gap closed (2026-07-31).** Flagged
+  by the same audit that containerized kindroid-mcp: `docker-compose.yml`
+  hardcoded the `volumes:` host path to an absolute NAS path
+  (`/volume1/Media/_mcp-scratch`) with zero `${}` indirection, and never
+  set the code-supported `LOG_LEVEL` at all. Now `${HOST_IMAGE_DIR:-./data/images}`
+  and `LOG_LEVEL: "${LOG_LEVEL:-info}"`, both Portainer-overridable.
+  `MCP_PORT` stays hardcoded deliberately — it's container-internal
+  wiring matching `EXPOSE`/`HEALTHCHECK`, exempt per the standard.
+  `MCP_BIND_HOST` was considered and deferred — same MCP-F03 tradeoff
+  noted above, not a new gap.
 
 ## Next
 
