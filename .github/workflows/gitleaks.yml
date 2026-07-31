@@ -1,0 +1,40 @@
+# Canonical secret-scanning workflow — standard UNI-04.
+#
+# This is the fleet's UNIVERSAL CI FLOOR: every repo runs it, whatever else
+# it does or doesn't run.
+#
+# Why this exists when the repo already has a pre-commit hook: a local hook
+# is bypassable by design. --no-verify skips it, an unset core.hooksPath
+# disables it silently, a fresh clone has it inactive until someone runs the
+# installer, and a commit pushed from another machine (or merged via the
+# GitHub API) never saw it — exactly how a personal-domain email once
+# reached this repo's public history via a merge commit the local hook
+# never ran on. CI is the backstop that can't be skipped by the person
+# making the mistake.
+
+name: gitleaks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan for secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: a secret introduced in an earlier commit and
+          # removed in a later one is still in the pack and still needs
+          # rotating. A shallow clone would scan only the tip and report
+          # clean.
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
