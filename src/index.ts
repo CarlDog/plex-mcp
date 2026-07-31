@@ -10,6 +10,7 @@ import { log } from "./log.js";
 import { PlexClient } from "./plex.js";
 import { resolveTlsCredentials } from "./tls.js";
 import { registerTools } from "./tools/index.js";
+import { SERVER_VERSION } from "./version.js";
 
 const PLEX_URL = process.env.PLEX_URL;
 const PLEX_TOKEN = process.env.PLEX_TOKEN;
@@ -38,7 +39,7 @@ function createServer(): McpServer {
   const server = new McpServer(
     {
       name: "plex-mcp",
-      version: "0.7.1",
+      version: SERVER_VERSION,
     },
     {
       instructions: INSTRUCTIONS,
