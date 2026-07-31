@@ -6,9 +6,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
 import {
+  DESTRUCTIVE_ANNOTATIONS,
+  DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS,
   READ_ONLY_ANNOTATIONS,
   SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
-  SAFE_WRITE_ANNOTATIONS,
   asText,
   withLogging,
 } from "./helpers.js";
@@ -96,7 +97,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
             "The matched item's name (from plex_get_matches SearchResult.name). Required by Plex.",
           ),
       },
-      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS,
     },
     withLogging("plex_apply_match", async ({ rating_key, guid, name }) => {
       await plex.applyMatch(rating_key, guid, name);
@@ -224,7 +225,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
           .string()
           .describe("The Plex rating key of the item to split apart"),
       },
-      annotations: SAFE_WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     withLogging("plex_split_item", async ({ rating_key }) => {
       await plex.splitItem(rating_key);
@@ -251,7 +252,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
             "List of source ratingKeys to absorb into the target. Each will disappear after the merge.",
           ),
       },
-      annotations: SAFE_WRITE_ANNOTATIONS,
+      annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     withLogging(
       "plex_merge_items",

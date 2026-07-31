@@ -76,13 +76,26 @@ export const SAFE_IDEMPOTENT_WRITE_ANNOTATIONS = {
 } as const;
 
 // For genuinely destructive tools — data is removed or made
-// inaccessible in a way the user can't trivially undo. The only
-// instance today is plex_delete_playlist (the playlist disappears;
-// underlying media is untouched but the playlist's curation is
-// gone).
+// inaccessible in a way the user can't trivially undo. Covers
+// plex_delete_playlist (the playlist disappears; underlying media is
+// untouched but the playlist's curation is gone) and plex_split_item /
+// plex_merge_items (the original ratingKey(s) are consumed; a client
+// should confirm before calling either).
 export const DESTRUCTIVE_ANNOTATIONS = {
   readOnlyHint: false,
   destructiveHint: true,
+  openWorldHint: false,
+} as const;
+
+// For destructive tools that are still idempotent — re-running with the
+// same args produces the same end state, but the state it replaced can't
+// be recovered by any inverse operation this server exposes. The only
+// instance today is plex_apply_match: re-applying the same guid is a
+// no-op, but the item's prior binding (including "no match") is gone.
+export const DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
   openWorldHint: false,
 } as const;
 
