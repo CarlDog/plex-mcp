@@ -1,16 +1,9 @@
 # Status
 
-**Last updated:** 2026-05-18 (deploy verified end-to-end; bind
-mount `/volume1/Media/_mcp-scratch:/data/images:rw` active on the
-stack; `plex_save_image → fs_stat` round-trip proved with a real
-Young Guns II poster (240,332 bytes). PLEX-API.md gained the
-`/photo/:/transcode` width+height gotcha + an endpoints-table row
-each for plex_get_image and plex_save_image. v0.8 queue reordered:
-plex_upload_poster moved up to next-to-ship because today's
-poster-workflow handoff with Claude Desktop confirms the round-trip
-needs an upload side to complete the loop. Yesterday's work (v0.7.0
-release + v0.7.1 patch + plex_get_image + plex_get_item projection +
-tool annotations + plex_save_image) all live and serving.)
+**Last updated:** 2026-07-31 (fleet standards-audit issue #8, Tier 1+2
+items closed — see "Done" below. This line had drifted since
+2026-05-18 despite later Done entries landing; keeping it current
+going forward.)
 
 ## Phase
 
@@ -345,6 +338,57 @@ downloader-mcp.
   8/8 unit tests (42 live-Plex integration tests skip locally as
   always). Runtime majors (express 5, undici 8, zod 4, TS 7) remain
   deliberately deferred — see the closed npm-major PR #5.
+
+- **Fleet standards-audit issue #8 — Tier 1+2 closed (2026-07-31).**
+  The audit (filed 2026-07-25) found 11 failing standards checks plus
+  9 judgment-call items. Re-verified against current `main` before
+  starting: UNI-01 (LICENSE) and UNI-15 (personal-domain email in
+  public history) were already resolved — the latter via a history
+  rewrite that also explains why the OC git-onboard watermark had
+  gone stale (its recorded commit no longer exists). Closed the rest
+  of the mechanical findings across 6 commits:
+  - `needs: test` gates `docker-publish.yml`'s build job (UNI-14) —
+    a red `main` could previously still ship `:latest`.
+  - Standalone `gitleaks` CI workflow added (UNI-04) — the local
+    pre-commit hook is bypassable (`--no-verify`, unset
+    `core.hooksPath`, a merge via the GitHub API), which is exactly
+    how the now-scrubbed personal email reached history in the
+    first place.
+  - `MCP_IMAGE_MAX_BYTES=""` no longer silently disables the image
+    size cap (MCP-P07) — extracted `resolveImageMaxBytes()` in
+    `src/plex.ts`, unit-tested without a live Plex server.
+  - Dockerfile gained a `HEALTHCHECK` conditional on `MCP_PORT`
+    (MCP-E01) — stdio-mode containers short-circuit to healthy since
+    they have no HTTP server at all; HTTP-mode containers probe the
+    real endpoint. Verified both paths with a local `docker build`.
+  - `CHANGELOG.md` backfilled (UNI-12) from git tags + this file's
+    history; `.editorconfig` added verbatim from the fleet template
+    (UNI-06); `CLAUDE.md` gained the "Fleet standards: ts-mcp-server
+    v1.0" stamp (UNI-09).
+  - `plex_split_item` / `plex_merge_items` (consume/absorb
+    ratingKeys) and `plex_apply_match` (prior binding not
+    recoverable) were annotated `destructiveHint: false` despite
+    their own descriptions saying otherwise (MCP-P02) — fixed, and
+    added `DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS` for the
+    destructive-but-idempotent case `apply_match` needed.
+  - `tests/tool-annotations.test.ts`, `tests/tool-naming.test.ts`,
+    `tests/version-sync.test.ts` added (MCP-T01/T02/T03) — each
+    verified to actually fail on a reverted regression before being
+    left in its passing state. `src/version.ts` now holds
+    `SERVER_VERSION` as the one place both `package.json` and
+    `src/index.ts` derive from (well, the former is still hand-kept
+    in step — the test is what keeps them honest).
+  Deferred to a follow-up discussion (judgment calls, not
+  mechanical): UNI-16 (internal hostname/paths in tracked files,
+  fleet-wide), MCP-F03 (HTTP transport has no auth/Host-allowlist/
+  bind-host/idle-eviction — CLAUDE.md already documents this as an
+  accepted LAN-only tradeoff), MCP-P06 (name-confirmation on
+  destructive tools), MCP-P04/P05 (redaction chokepoint + log
+  verbosity), MCP-F01/F02 (fetch timeouts + retry/backoff), MCP-S01
+  (whether to adopt the fleet's `src/shared/` layer wholesale or just
+  fill its couple of genuine gaps — leaning toward the latter, this
+  repo predates the convention and has working hand-rolled
+  equivalents).
 
 ## Next
 
