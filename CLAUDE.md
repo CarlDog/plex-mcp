@@ -2,6 +2,8 @@
 
 MCP server for Plex Media Server, packaged as a Docker container.
 
+**Fleet standards:** ts-mcp-server v1.0 — audited 2026-07-25
+
 ## Status
 
 Single source of truth: [STATUS.md](STATUS.md). Do not duplicate status
