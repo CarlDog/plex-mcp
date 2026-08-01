@@ -1,9 +1,8 @@
 # Status
 
-**Last updated:** 2026-07-31 (fleet standards-audit issue #8, Tier 1+2
-items closed — see "Done" below. This line had drifted since
-2026-05-18 despite later Done entries landing; keeping it current
-going forward.)
+**Last updated:** 2026-07-31 (`HOST_IMAGE_DIR` documented as REQUIRED
+for Portainer git-stack deploys after the relative compose default
+took the deployment down ~10h — see "Done" below.)
 
 ## Phase
 
@@ -399,6 +398,22 @@ downloader-mcp.
   wiring matching `EXPOSE`/`HEALTHCHECK`, exempt per the standard.
   `MCP_BIND_HOST` was considered and deferred — same MCP-F03 tradeoff
   noted above, not a new gap.
+- **MCP-E02's relative volume default took the deployment down ~10h
+  (2026-07-31).** The `${HOST_IMAGE_DIR:-./data/images}` fallback above
+  is a trap in a Portainer git stack: each redeploy clones the repo
+  into a fresh `/data/compose/<stack-id>/<commit>/` directory where
+  `./data/images` doesn't exist, Docker refuses the bind mount, and
+  the container lands in `created` state — never starting, with no
+  restart policy to save it. An automatic redeploy triggered it; the
+  stack stayed down until
+  `HOST_IMAGE_DIR=/volume1/Media/_mcp-scratch` was set in the stack's
+  Portainer environment variables (now set; service healthy — that
+  path matches filesystem-mcp's `/media/_mcp-scratch` mount, closing
+  the plex_save_image → filesystem-mcp loop). README's Portainer
+  section now documents `HOST_IMAGE_DIR` as required for git-stack
+  deploys plus the stuck-in-`created` failure mode. Fleet lesson
+  filed in claude-fleet-kit:
+  `2026-07-31-relative-compose-volume-defaults-break-portainer-git-stacks`.
 
 ## Next
 

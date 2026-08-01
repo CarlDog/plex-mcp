@@ -177,8 +177,30 @@ docker compose up
 1. In Portainer, *Stacks → Add Stack → Repository*.
 2. Repository URL: `https://github.com/CarlDog/plex-mcp`
 3. Compose path: `docker-compose.yml`
-4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`, optionally `HOST_PORT`.
+4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`, and
+   `HOST_IMAGE_DIR` (**required** for git stacks — see below);
+   optionally `HOST_PORT`.
 5. Deploy. Healthcheck reaches green within ~10 seconds.
+
+### `HOST_IMAGE_DIR` is required for git-stack deploys
+
+The compose default for the `plex_save_image` output volume is the
+*relative* path `./data/images`. That works for a local
+`docker compose up` from a clone, but not in a Portainer git stack:
+every redeploy clones the repo into a fresh per-commit directory
+(`/data/compose/<stack-id>/<commit>/`), where `./data/images` doesn't
+exist. Docker refuses the bind mount and the container is left stuck
+in `created` state — it never starts. This also hits *automatic*
+redeploys (image update, git poll), so a previously healthy stack can
+go down with no manual action; the only symptom is the container
+sitting in `created`.
+
+Set `HOST_IMAGE_DIR` to an **absolute host path** in the stack's
+environment variables. Recommended: the host directory backing
+filesystem-mcp's `/media/_mcp-scratch` mount — e.g.
+`/volume1/Media/_mcp-scratch` on a Synology NAS — which keeps the
+`plex_search → plex_save_image → filesystem-mcp` pipeline on one
+shared directory.
 
 ## Use with Claude Desktop
 

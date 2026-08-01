@@ -35,6 +35,11 @@ the work rather than after the fact.
 - Dev/CI chain modernized: ESLint 10, Prettier 3.9, `@modelcontextprotocol/sdk`
   1.30, vitest 4, Node 22-alpine → 26-alpine base image, the fleet's
   canonical Dependabot config.
+- README documents `HOST_IMAGE_DIR` as **required** for Portainer
+  git-stack deploys: the relative compose default (`./data/images`)
+  resolves inside the per-commit clone directory, Docker refuses the
+  bind mount, and the container lands stuck in `created` without
+  starting (took the deployed stack down ~10h on 2026-07-31).
 
 ### Fixed
 
