@@ -68,6 +68,11 @@ the work rather than after the fact.
 
 ### Changed
 
+- `plex_refresh_section`'s description now notes the async two-pass
+  reconciliation caveat: after a bulk filesystem rename/move, a
+  single refresh can leave the section partially reconciled (old
+  `episodeFileId`s detached, new ones not yet re-attached), needing a
+  second call once the first scan settles.
 - Phase-end audit cleanup: extracted `resolveIntEnv` to deduplicate 4
   byte-identical env-parsing functions in `src/plex.ts`; extracted
   `assertSafeBasename`/`ensureSaveDir`/`writeBytesToPath` to deduplicate

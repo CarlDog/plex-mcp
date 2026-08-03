@@ -1,23 +1,20 @@
 # Status
 
-**Last updated:** 2026-08-03 (Big single-day session. Fleet
-standards-audit issue #8 closed (MCP-S01/F01/F02/P04/P05/P06/F03,
-UNI-16 non-issue). Shipped collections support, subtitle discovery,
-and `plex_download_logs`, all verified against the live server. Ran a
-phase-end audit on that batch: doc drift fixed, 4 duplication findings
-deduped, a real non-positive-timeout bug fixed, and the long-standing
-`unmatch`/`applyMatch` test flake finally root-caused, fixed, and its
-real-world damage (a production library item left unmatched) repaired
-live. Then shipped poster management (`plex_list_posters`/
-`plex_set_poster`/`plex_upload_poster`), correcting a stale
-speculative design after researching python-plexapi's real source —
-upload and select turned out to be separate operations, and live
-testing found Plex auto-selects uploads server-side regardless. Suite
-is 121/121 green. Then documented Editions in `docs/PLEX-API.md`,
-correcting a wrong assumption along the way — `editionTitle` is a
-top-level item field (separate items sharing a `guid`), not a
-`Media[]` field — verified against two real live examples. See "Done"
-below.)
+**Last updated:** 2026-08-03 (Big single-day session — full detail in
+"Done" below. Fleet standards-audit issue #8 closed. Shipped
+collections, subtitle discovery, `plex_download_logs`, then a
+phase-end audit (doc drift, 4 dedups, a real timeout bug, and the
+long-standing `unmatch`/`applyMatch` flake finally root-caused and its
+real-world damage repaired live). Then shipped poster management
+(`plex_list_posters`/`plex_set_poster`/`plex_upload_poster`),
+correcting a stale design after researching python-plexapi's real
+source. Then closed out the remaining v0.8 doc-gap queue in
+`docs/PLEX-API.md` — Editions, the `tv.plex.agents.none://` GUID
+format, ratingKey churn on filesystem renames, `plex_refresh_section`'s
+two-pass semantics, and the `Field[]` locked-fields shape — correcting
+two more wrong assumptions along the way (Editions' field placement,
+confirmed against real Deadpool 2 / WrestleMania 42 data). Suite is
+121/121 green throughout.)
 
 ## Phase
 
@@ -832,6 +829,32 @@ downloader-mcp.
     `split`/`unmatch`, which only holds until the next rescan
     re-merges things.
 
+- **Remaining v0.8 doc-gap queue closed out (2026-08-03).** The 4
+  remaining items from the 2026-05-11 "v0.8 candidates" doc-gap list
+  (Editions handled separately above). Docs-only except item 3, which
+  touched one tool description string.
+  1. **`tv.plex.agents.none://<ratingKey>` GUID format** — added to
+     the existing `agents.none` gotcha in `docs/PLEX-API.md`.
+     Confirmed against this session's own "Arcane" repair earlier
+     today (`guid: "tv.plex.agents.none://40892"`) rather than a
+     fresh capture — already had a real, first-hand example.
+  2. **ratingKey-churn-on-path-change** — new gotcha, documented as
+     established operational history from the 2026-05-11
+     WWE-PPV/Panty-&-Stocking rename sessions. Deliberately not
+     re-verified live this session: reproducing it means actually
+     renaming real library files, not a risk worth taking just to
+     confirm a doc claim.
+  3. **`plex_refresh_section`'s two-pass semantics** — updated the
+     tool's description (`src/tools/admin.ts`) with the reconciliation
+     caveat, plus a matching `docs/PLEX-API.md` gotcha. Chose the
+     "document it" fork over adding a `wait_for_scan` follow-up tool.
+  4. **`Field[]` locked-fields shape** — new gotcha, this one verified
+     live across 3 real items with different lock states (0, 2, 5
+     locked fields). `Field[]` is **absent entirely** (not `[]`) when
+     nothing's locked, and every entry present has `locked: true` —
+     confirms it's a sparse "what's locked" list, not a full
+     per-field inventory with booleans either way.
+
 ## Next
 
 - **ChatGPT Apps SDK alignment — Phase 1 done, Phases 2–4 not
@@ -910,29 +933,27 @@ downloader-mcp.
      against two real examples (Deadpool 2's Theatrical/Super Duper
      Cut, WWE WrestleMania 42's Saturday/Sunday), including the raw
      `{edition-<name>}` filenames on disk.
-  3. **Document the `tv.plex.agents.none://<rating_key>` GUID
-     format** for unmatched items. Useful for tooling that
-     distinguishes matched vs unmatched without parsing the
-     `Guid` array.
-  4. **Document the ratingKey-churn-on-path-change behavior.**
-     When `fs_move` renames a folder/file, Plex's rescan
-     sometimes re-mints the ratingKey (creating a new item +
-     orphaning the old) instead of updating the path on the
-     existing rk. Locked title overrides do NOT always survive
-     this churn. Downstream callers holding rk references in
-     playlists, history, or external indices must be defensive.
-  5. **`plex_refresh_section` async semantics need a note in
-     the tool description.** Tool returns immediately, but the
-     server-side disk scan continues. Empirically: after bulk
-     `fs_move` operations, the *first* refresh detached old
-     episodeFileIds without re-attaching new ones; a *second*
-     refresh completed the reconciliation. Either document the
-     two-pass pattern or add an optional `wait_for_scan`
-     follow-up tool.
-  6. **`Field` array on `plex_get_item` exposes which fields
-     are locked** (`title`, `titleSort`, `thumb`, etc.). This is
-     useful for tooling but undocumented in PLEX-API.md. Worth
-     a one-liner.
+  3. ~~Document the `tv.plex.agents.none://<rating_key>` GUID
+     format~~ — **shipped 2026-08-03**, extending the existing
+     `agents.none` gotcha. Confirmed against this session's own
+     "Arcane" repair: `guid: "tv.plex.agents.none://40892"`, exactly
+     `tv.plex.agents.none://` + the item's own ratingKey.
+  4. ~~Document the ratingKey-churn-on-path-change behavior~~ —
+     **shipped 2026-08-03** as a new gotcha, documented as established
+     operational history (not re-verified live — reproducing it would
+     mean actually renaming real library files just to confirm a doc
+     claim, not a justified risk).
+  5. ~~`plex_refresh_section` async semantics need a note~~ —
+     **shipped 2026-08-03**: updated the tool's description
+     (`src/tools/admin.ts`) with the two-pass caveat, plus a matching
+     `docs/PLEX-API.md` gotcha. Went with the documentation option, not
+     the `wait_for_scan` follow-up tool.
+  6. ~~`Field` array on `plex_get_item` exposes which fields are
+     locked~~ — **shipped 2026-08-03**. Verified live across 3 items
+     with different lock states: `Field[]` is **absent entirely**
+     (not `[]`) when nothing's locked, and every present entry has
+     `locked: true` — it's a sparse "what's locked" list, not a full
+     per-field inventory.
 - ~~v0.8 candidates: poster / image management (Layer 1).~~ —
   **shipped 2026-08-03** as `plex_list_posters`/`plex_set_poster`/
   `plex_upload_poster` (see Done below). The open design questions

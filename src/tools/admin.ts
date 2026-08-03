@@ -193,7 +193,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
     {
       title: "Refresh Plex Library Section",
       description:
-        "Trigger a metadata refresh for an entire library section. The refresh runs asynchronously on Plex; this tool returns immediately. Useful after bulk filesystem changes that Plex's built-in auto-scan hasn't picked up. Default is an incremental scan; pass force=true for a deep refresh that re-evaluates every item (slow, server-load-heavy). For per-item refresh, use plex_refresh_metadata.",
+        "Trigger a metadata refresh for an entire library section. The refresh runs asynchronously on Plex; this tool returns immediately, and the server-side scan continues after the call returns. Useful after bulk filesystem changes that Plex's built-in auto-scan hasn't picked up — but after a bulk rename/move, one refresh may only partially reconcile the section (old episodeFileIds detached, new ones not yet re-attached); a second call after the first scan settles often finishes the job. Default is an incremental scan; pass force=true for a deep refresh that re-evaluates every item (slow, server-load-heavy). For per-item refresh, use plex_refresh_metadata.",
       inputSchema: {
         section_id: z
           .string()

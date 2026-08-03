@@ -126,6 +126,22 @@ files on disk had perfect TRaSH-style names with embedded IDs, but
 every item was on `agents.none`, so Plex displayed the raw release
 filename as the title.
 
+**The `guid` field for an unmatched item is
+`tv.plex.agents.none://<ratingKey>`** — confirmed live (2026-08-03,
+see the `unmatch`/`applyMatch` flake fix in STATUS.md): the "Arcane"
+show sat unmatched in production with `guid:
+"tv.plex.agents.none://40892"`, exactly its own `ratingKey` after the
+scheme. Useful for tooling that needs to detect the unmatched state
+from a `plex_browse`/`plex_get_item` response without a round-trip
+through `plex_get_matches` — check whether `guid` starts with
+`tv.plex.agents.none://` (or the equivalent `*.agents.none://` for
+non-`tv` agent types) rather than only checking the `agent` field,
+since `plex_browse`'s sparse projections may omit `agent` but usually
+carry `guid`. Not found in python-plexapi's source at all (the
+wrapper doesn't special-case this scheme), so this is a live-observed
+Plex convention, not something cross-validated against the client
+library.
+
 ### Auto-merge: `apply_match` triggers it, `split` doesn't
 
 When you call `plex_apply_match` and the new GUID matches an
@@ -258,6 +274,80 @@ user to stage / migrate content; an audit or bulk operation should
 skip them by default and only act on `hidden: 0` sections unless the
 user explicitly asks otherwise. The Plex API doesn't expose a
 `?include_hidden=false` flag — filtering is the agent's job.
+
+### A filesystem rename/move can re-mint the `ratingKey` instead of updating it
+
+Observed during WWE PPV consolidation and a multi-episode rename
+session (2026-05-11) — not re-verified live this session, since
+reproducing it would mean actually renaming real files in the user's
+library just to confirm a documentation claim, which isn't a
+justified risk. Recorded here as established operational history,
+not a fresh capture.
+
+When a file or folder is renamed/moved on disk (e.g. via
+filesystem-mcp's `fs_move`) and Plex rescans, it does **not**
+reliably treat this as "the same item, new path." Sometimes it does;
+sometimes it mints a **new** `ratingKey` for what Plex sees as a
+newly-appeared file, leaving the old `ratingKey` orphaned (and
+Plex-cleaned on a later scan once the old path is confirmed gone).
+Locked field overrides (title, summary, etc.) do **not** reliably
+survive this churn — a fresh item starts from the agent's raw data
+again, locks and all.
+
+Practical implications:
+
+- Any code or tooling that holds a `ratingKey` reference across a
+  filesystem operation (a playlist entry, a watch-history join, an
+  external index) must treat that reference as **potentially stale**
+  after a rename/move + rescan, not just after an explicit delete.
+- After a bulk rename, re-verify affected items via `plex_browse`
+  (matching by file path or a distinguishing embedded ID like
+  `{imdb-tt...}`, not by the `ratingKey` you had before the move)
+  rather than assuming the old `ratingKey` still resolves.
+- Re-apply any locked-field overrides that mattered (title, etc.)
+  after confirming the item's current `ratingKey`, rather than
+  assuming they carried over.
+
+### `plex_refresh_section` can need two calls after a bulk filesystem change
+
+Same operational-history caveat as above: observed during bulk
+`fs_move` reorganization (2026-05-11), not freshly reproduced this
+session. The tool itself returns as soon as Plex *accepts* the
+refresh request — the actual disk scan continues after the call
+returns (see the tool's description). After a large batch of
+renames/moves, the **first** refresh sometimes only gets partway
+through reconciliation: old `episodeFileId`s get detached from their
+items, but the new file paths aren't re-attached yet. A **second**
+`plex_refresh_section` call (after giving the first scan time to
+settle) typically completes the reconciliation. If a section's
+content still looks stale/incomplete right after a refresh call
+returns, that's the first symptom to check for — not necessarily a
+sign something's actually broken.
+
+### `Field[]` on an item lists only its *locked* fields — absent means none are locked
+
+`plex_get_item`'s response carries a `Field[]` array,
+`[{name: "<fieldName>", locked: true}, ...]`, when the item has one
+or more manually-locked fields (typically set via
+`plex_edit_metadata`'s default `lock=true`). Confirmed live
+(2026-08-03) across several real items with different lock states —
+`Field` is **entirely absent** (not an empty array) on items with
+zero locks, and **every entry present has `locked: true`** — no
+example returned a `locked: false` entry for an unlocked field. So
+`Field[]` is a sparse list of *what's locked*, not a complete
+inventory of every field with its lock state:
+
+```
+rk 40892  (Arcane, several manual overrides): summary, thumb, genre, collection, label
+rk 143136 (Deadpool 2, minimal overrides):     thumb, label
+rk 214521 (freshly-added, no manual edits):    Field key absent entirely
+```
+
+Useful for tooling that wants to know "what has a human touched on
+this item" without diffing full field values against the agent's
+current data —
+`(item.Field ?? []).some((f) => f.name === "title")` answers "is the
+title locked" directly.
 
 ## Endpoints currently used
 
