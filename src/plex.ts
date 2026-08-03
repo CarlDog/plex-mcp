@@ -274,12 +274,21 @@ export class PlexClient {
     }
   }
 
-  private async request<T>(
+  /**
+   * Shared request/error-handling contract for request()/requestNoContent():
+   * build the URL, fetch through the timeout+retry chokepoint, log +
+   * throw on network or HTTP failure, log on success, and return the
+   * raw Response. Callers own body handling — request() JSON-parses it,
+   * requestNoContent() discards it — since that's their only real
+   * difference. Extracted so the error-message/logging contract can't
+   * drift between the two (phase-end audit finding, 2026-08-03).
+   */
+  private async sendRequest(
     path: string,
-    params: Record<string, string> = {},
-    headers: Record<string, string> = {},
-    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
-  ): Promise<PlexResponse<T>> {
+    params: Record<string, string>,
+    headers: Record<string, string>,
+    method: "GET" | "POST" | "PUT" | "DELETE",
+  ): Promise<Response> {
     const url = new URL(path, this.config.url);
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
@@ -290,11 +299,7 @@ export class PlexClient {
     try {
       res = await this.fetchWithTimeoutAndRetry(url, {
         method,
-        headers: {
-          "X-Plex-Token": this.config.token,
-          Accept: "application/json",
-          ...headers,
-        },
+        headers: { "X-Plex-Token": this.config.token, ...headers },
       });
     } catch (err) {
       log.error("plex", "network error", {
@@ -319,6 +324,21 @@ export class PlexClient {
       );
     }
     log.debug("plex", "ok", { method, path, status: res.status, ms });
+    return res;
+  }
+
+  private async request<T>(
+    path: string,
+    params: Record<string, string> = {},
+    headers: Record<string, string> = {},
+    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
+  ): Promise<PlexResponse<T>> {
+    const res = await this.sendRequest(
+      path,
+      params,
+      { Accept: "application/json", ...headers },
+      method,
+    );
     // Plex sometimes returns empty bodies even for non-GET. Guard
     // against parse errors by reading text first and returning an
     // empty PlexResponse if unparseable.
@@ -336,41 +356,7 @@ export class PlexClient {
     params: Record<string, string> = {},
     method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
   ): Promise<void> {
-    const url = new URL(path, this.config.url);
-    for (const [k, v] of Object.entries(params)) {
-      url.searchParams.set(k, v);
-    }
-    const start = Date.now();
-    log.debug("plex", "request", { method, path });
-    let res: Response;
-    try {
-      res = await this.fetchWithTimeoutAndRetry(url, {
-        method,
-        headers: { "X-Plex-Token": this.config.token },
-      });
-    } catch (err) {
-      log.error("plex", "network error", {
-        method,
-        path,
-        ms: Date.now() - start,
-        msg: (err as Error).message,
-      });
-      throw err;
-    }
-    const ms = Date.now() - start;
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      log.warn("plex", "http error", {
-        method,
-        path,
-        status: res.status,
-        ms,
-      });
-      throw new Error(
-        `Plex ${res.status} ${res.statusText} for ${method} ${path}: ${body.slice(0, 200)}`,
-      );
-    }
-    log.debug("plex", "ok", { method, path, status: res.status, ms });
+    await this.sendRequest(path, params, {}, method);
   }
 
   async hubs(): Promise<unknown[]> {
