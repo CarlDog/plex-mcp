@@ -257,6 +257,44 @@ below). Shapes without ✓ are speculative.
 | Hub-search (richer than `/search`) ✓ pkkid | `GET /hubs/search?query=&limit=&sectionId=&includeCollections=1&includeExternalMedia=1` | Low (additive vs `plex_search`) |
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |
 | Currently transcoding sessions          | `GET /transcode/sessions`                                                                | Low                      |
+| Subtitle track discovery + content      | See below                                                                                 | Low (discovery) / Unresearched (content) |
+
+### Subtitle track discovery + content (idea, not designed — 2026-08-02)
+
+Motivated by plex-companion wanting richer, more accurate context for its
+watch-along reactions than a Plex synopsis + web search can give — subtitle
+text is exactly what was watched, timestamped, and inherently spoiler-safe
+up to the current position (unlike a web search, which can't help wandering
+into later episodes).
+
+- **Discovery is nearly free — the plumbing already exists, just discarded.**
+  `PlexClient.getItem`'s minimal mode strips `Media[].Part[].Stream[]`
+  (`src/plex.ts` ~line 300) as one of two heavyweight drops. That array is
+  where Plex reports each subtitle track's language/codec/id when present.
+  Not stripping it (or requesting via `fields`) surfaces track metadata with
+  no new endpoint — but that's metadata only (does a track exist, what
+  language), not the subtitle text itself.
+- **Fetching actual subtitle content is unresearched** — no endpoint shape
+  captured yet. Likely lives under `/library/streams/{streamId}` or a
+  part-relative download path; needs the plexapi.dev / pkkid sources checked
+  before building.
+- **Prefer SDH tracks over plain subtitles when both exist.** SDH
+  (Subtitles for the Deaf and Hard-of-hearing) includes bracketed
+  non-dialogue cues — `[thunder rumbles]`, `[tense music playing]`, `[door
+  creaks]` — describing what's happening in the audio, not just what's
+  said. For a companion reacting to atmosphere and sound design, not just
+  dialogue, that's real signal plain subtitles omit entirely. Plain
+  subtitles are an acceptable fallback when no SDH track exists, just
+  thinner. Track selection would need to check the `Stream` entry's
+  hearing-impaired flag (exact field TBD — check pkkid's `media.py`
+  `SubtitleStream` class) and prefer it over a plain track in the same
+  language.
+- Two distinct capabilities: static content enrichment (fetch the whole
+  subtitle file, feed a condensed version into a lore/context prompt — cheap,
+  fits a request/response tool) vs. live position-correlated interjections
+  (needs an active session tracker polling `plex_now_playing` against
+  subtitle timestamps — a different shape of feature entirely, out of scope
+  for a single tool).
 
 **Out of scope** (per scoping decision in v0.2): `DELETE /library/metadata/{key}`,
 `DELETE /library/sections/{id}`, and any other operation that destroys
