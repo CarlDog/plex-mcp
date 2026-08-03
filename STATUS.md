@@ -1,8 +1,9 @@
 # Status
 
-**Last updated:** 2026-08-03 (MCP-F03 HTTP transport hardening shipped
-and verified live — `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`
-DNS-rebinding guard + idle-session eviction. UNI-16 closed as a
+**Last updated:** 2026-08-03 (MCP-P06 destructive-tool name confirmation
+shipped — `plex_delete_playlist`/`plex_split_item`/`plex_merge_items`
+now refuse on a resolved-title mismatch. Also this session: MCP-F03
+HTTP transport hardening shipped and verified live, UNI-16 closed as a
 non-issue for this repo's current tree. See "Done" below.)
 
 ## Phase
@@ -473,6 +474,28 @@ downloader-mcp.
   deploys plus the stuck-in-`created` failure mode. Fleet lesson
   filed in claude-fleet-kit:
   `2026-07-31-relative-compose-volume-defaults-break-portainer-git-stacks`.
+- **MCP-P06 destructive-tool name confirmation closed (2026-08-03).**
+  `plex_delete_playlist`, `plex_split_item`, and `plex_merge_items`
+  previously gated on an opaque ratingKey/id alone — a transposed digit
+  would act on the wrong target with nothing to notice. Each now
+  requires `confirm_title` (`confirm_into_title` for merge) matching
+  the resolved target's actual current title before proceeding, via a
+  new `assertNameMatches()` helper in `src/tools/helpers.ts`. Unlike a
+  bare `confirm: true` flag — advisory against an autonomous agent,
+  which can always self-supply it — a wrong id resolves to a
+  *different* item whose real title won't match what the caller
+  expected, so the mismatch surfaces before anything is
+  deleted/consumed. `source_rating_keys` on `plex_merge_items` are not
+  individually confirmed (only the target) — matches the audit's own
+  scoped finding and keeps the fix proportionate; noted in the tool
+  description so callers double-check sources themselves. Breaking
+  change to the 3 tools' input shape (documented in CHANGELOG); no
+  live-infra coordination needed since this is a tool-schema change,
+  not an env var. Added `tests/name-matches-guard.test.ts` (unit tests
+  for the helper) and `tests/destructive-confirm-guard.test.ts` (wiring
+  tests proving each tool actually refuses the mismatched case and
+  never calls its destructive PlexClient method — not just that the
+  helper exists somewhere unused).
 
 ## Next
 

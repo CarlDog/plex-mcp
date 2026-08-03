@@ -42,6 +42,35 @@ export function assertRelativePlexPath(
   }
 }
 
+/**
+ * Refuse an irreversible operation unless the caller's confirm_title
+ * matches the resolved target's actual current title (MCP-P06). A
+ * `confirm: true` flag alone is advisory — an autonomous agent can
+ * always self-supply it. This can't be self-supplied the same way: a
+ * transposed digit in a ratingKey resolves to a *different* item, whose
+ * real title won't match what the caller expected, so the mismatch
+ * surfaces before anything is deleted/consumed rather than after.
+ *
+ * `actualName` undefined means the target itself couldn't be resolved
+ * (bad id) — reported distinctly from a resolved-but-mismatched title.
+ */
+export function assertNameMatches(
+  toolName: string,
+  expectedName: string,
+  actualName: string | undefined,
+): void {
+  if (actualName === undefined) {
+    throw new Error(
+      `${toolName}: could not resolve the target to verify its name — check the id`,
+    );
+  }
+  if (actualName !== expectedName) {
+    throw new Error(
+      `${toolName}: confirm_title "${expectedName}" does not match the resolved target's actual title "${actualName}" — refusing to proceed. Re-check the id, or pass the exact current title to confirm intent.`,
+    );
+  }
+}
+
 // Per the MCP spec + ChatGPT Apps SDK metadata guide
 // (docs/CHATGPT-APPS-SDK.md), tool annotations are hints to the
 // client about a tool's behavior. They aren't enforced — clients

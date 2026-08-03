@@ -32,6 +32,10 @@ the work rather than after the fact.
 
 ### Changed
 
+- **Breaking (tool input shape):** `plex_delete_playlist`, `plex_split_item`,
+  and `plex_merge_items` now require `confirm_title` /
+  `confirm_into_title` matching the target's actual current title
+  (MCP-P06) — see Security below. Existing callers must add the field.
 - Dev/CI chain modernized: ESLint 10, Prettier 3.9, `@modelcontextprotocol/sdk`
   1.30, vitest 4, Node 22-alpine → 26-alpine base image, the fleet's
   canonical Dependabot config.
@@ -77,6 +81,15 @@ the work rather than after the fact.
   value explicitly — kept as a plain operator-set allowlist entry rather
   than templated into `docker-compose.yml`, since this is a security
   policy, not a harmless convenience default.
+- Destructive-tool name confirmation (MCP-P06): `plex_delete_playlist`,
+  `plex_split_item`, and `plex_merge_items` previously gated on an opaque
+  ratingKey/id alone — a transposed digit would act on the wrong target
+  with nothing to catch it. Each now requires `confirm_title` (or
+  `confirm_into_title` for merge) matching the resolved target's actual
+  current title, refusing with both titles quoted in the error otherwise.
+  Unlike a bare `confirm: true` flag (advisory — an autonomous agent can
+  always self-supply it), a wrong id resolves to a *different* item whose
+  real title won't match what the caller expected.
 
 ## [0.7.1] - 2026-05-17
 

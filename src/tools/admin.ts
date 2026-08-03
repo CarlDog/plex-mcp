@@ -10,6 +10,7 @@ import {
   DESTRUCTIVE_IDEMPOTENT_ANNOTATIONS,
   READ_ONLY_ANNOTATIONS,
   SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
+  assertNameMatches,
   asText,
   withLogging,
 } from "./helpers.js";
@@ -219,17 +220,25 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
     {
       title: "Split Plex Item",
       description:
-        "Split a Plex item back into its constituent media variants as N separate items. Use when Plex auto-grouped legitimately-separate releases into one ratingKey (e.g. two distinct events sharing a similar title were merged). All-or-nothing — there is no media-level granularity. The original ratingKey is consumed; N new ratingKeys are created. Reverse via plex_merge_items if the split was wrong. Mutating; confirm intent before calling.",
+        "Split a Plex item back into its constituent media variants as N separate items. Use when Plex auto-grouped legitimately-separate releases into one ratingKey (e.g. two distinct events sharing a similar title were merged). All-or-nothing — there is no media-level granularity. The original ratingKey is consumed; N new ratingKeys are created. Reverse via plex_merge_items if the split was wrong. Requires confirm_title to match the item's actual current title (from plex_get_item) — protects against a transposed rating_key splitting the wrong item.",
       inputSchema: {
         rating_key: z
           .string()
           .describe("The Plex rating key of the item to split apart"),
+        confirm_title: z
+          .string()
+          .describe(
+            "The item's exact current title, from plex_get_item. Must match, or the split is refused.",
+          ),
       },
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
-    withLogging("plex_split_item", async ({ rating_key }) => {
+    withLogging("plex_split_item", async ({ rating_key, confirm_title }) => {
+      const item = (await plex.getItem(rating_key)) as
+        { title?: string } | undefined;
+      assertNameMatches("plex_split_item", confirm_title, item?.title);
       await plex.splitItem(rating_key);
-      return asText({ split: rating_key });
+      return asText({ split: rating_key, title: confirm_title });
     }),
   );
 
@@ -238,7 +247,7 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
     {
       title: "Merge Plex Items",
       description:
-        "Merge other Plex items INTO a target item. The target ratingKey, GUID, and metadata survive; sources are absorbed (their ratingKeys disappear, their Media variants become Media variants of the target). Use to clean up duplicates from differently-named release directories. Reverse via plex_split_item if the merge was wrong (but the resulting split items will have new ratingKeys, not the originals). Mutating; confirm intent before calling.",
+        "Merge other Plex items INTO a target item. The target ratingKey, GUID, and metadata survive; sources are absorbed (their ratingKeys disappear, their Media variants become Media variants of the target). Use to clean up duplicates from differently-named release directories. Reverse via plex_split_item if the merge was wrong (but the resulting split items will have new ratingKeys, not the originals). Requires confirm_into_title to match the target item's actual current title (from plex_get_item) — protects against a transposed into_rating_key merging into the wrong item. Source ratingKeys are NOT individually confirmed; double-check them before calling.",
       inputSchema: {
         into_rating_key: z
           .string()
@@ -251,15 +260,28 @@ export function registerAdminTools(server: McpServer, plex: PlexClient): void {
           .describe(
             "List of source ratingKeys to absorb into the target. Each will disappear after the merge.",
           ),
+        confirm_into_title: z
+          .string()
+          .describe(
+            "The target item's exact current title, from plex_get_item. Must match, or the merge is refused.",
+          ),
       },
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
     withLogging(
       "plex_merge_items",
-      async ({ into_rating_key, source_rating_keys }) => {
+      async ({ into_rating_key, source_rating_keys, confirm_into_title }) => {
+        const target = (await plex.getItem(into_rating_key)) as
+          { title?: string } | undefined;
+        assertNameMatches(
+          "plex_merge_items",
+          confirm_into_title,
+          target?.title,
+        );
         await plex.mergeItems(into_rating_key, source_rating_keys);
         return asText({
           merged_into: into_rating_key,
+          title: confirm_into_title,
           sources: source_rating_keys,
         });
       },

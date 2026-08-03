@@ -13,6 +13,7 @@ import {
   DESTRUCTIVE_ANNOTATIONS,
   READ_ONLY_ANNOTATIONS,
   SAFE_WRITE_ANNOTATIONS,
+  assertNameMatches,
   asText,
   withLogging,
 } from "./helpers.js";
@@ -130,15 +131,29 @@ export function registerPlaylistsTools(
     {
       title: "Delete Plex Playlist",
       description:
-        "Delete a playlist (mutates server state, NOT REVERSIBLE without recreating). Only deletes the playlist metadata — the underlying media files are not touched. Plex offers no API for deleting media via this server.",
+        "Delete a playlist (mutates server state, NOT REVERSIBLE without recreating). Only deletes the playlist metadata — the underlying media files are not touched. Plex offers no API for deleting media via this server. Requires confirm_title to match the playlist's actual current title (from plex_list_playlists) — protects against a transposed or stale playlist_id deleting the wrong playlist.",
       inputSchema: {
         playlist_id: z.string().describe("Playlist ratingKey to delete"),
+        confirm_title: z
+          .string()
+          .describe(
+            "The playlist's exact current title, from plex_list_playlists. Must match, or the deletion is refused.",
+          ),
       },
       annotations: DESTRUCTIVE_ANNOTATIONS,
     },
-    withLogging("plex_delete_playlist", async ({ playlist_id }) => {
-      await plex.deletePlaylist(playlist_id);
-      return asText({ deleted: playlist_id });
-    }),
+    withLogging(
+      "plex_delete_playlist",
+      async ({ playlist_id, confirm_title }) => {
+        const playlists = (await plex.listPlaylists()) as Array<{
+          ratingKey?: string;
+          title?: string;
+        }>;
+        const target = playlists.find((p) => p.ratingKey === playlist_id);
+        assertNameMatches("plex_delete_playlist", confirm_title, target?.title);
+        await plex.deletePlaylist(playlist_id);
+        return asText({ deleted: playlist_id, title: confirm_title });
+      },
+    ),
   );
 }
