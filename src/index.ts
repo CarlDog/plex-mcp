@@ -6,24 +6,14 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
 import { createServer as createHttpsServer } from "node:https";
 import express, { type Request, type Response } from "express";
+import { config } from "./config.js";
 import { log } from "./log.js";
 import { PlexClient } from "./plex.js";
 import { resolveTlsCredentials } from "./tls.js";
 import { registerTools } from "./tools/index.js";
 import { SERVER_VERSION } from "./version.js";
 
-const PLEX_URL = process.env.PLEX_URL;
-const PLEX_TOKEN = process.env.PLEX_TOKEN;
-
-if (!PLEX_URL || !PLEX_TOKEN) {
-  log.error(
-    "startup",
-    "PLEX_URL and PLEX_TOKEN environment variables are required",
-  );
-  process.exit(1);
-}
-
-const plex = new PlexClient({ url: PLEX_URL, token: PLEX_TOKEN });
+const plex = new PlexClient({ url: config.plexUrl, token: config.plexToken });
 
 const INSTRUCTIONS = `MCP server for Plex Media Server. Lets you search libraries, browse recently-added / on-deck / now-playing, fetch full metadata, manage playlists, and mark items watched/unwatched.
 
@@ -49,53 +39,12 @@ function createServer(): McpServer {
   return server;
 }
 
-const portStr = process.env.MCP_PORT;
-const port = portStr ? Number.parseInt(portStr, 10) : null;
-if (portStr && (port === null || Number.isNaN(port))) {
-  log.error("startup", "Invalid MCP_PORT", { value: portStr });
-  process.exit(1);
-}
-
-// DNS-rebinding defense (MCP-F03): binding 0.0.0.0 inside a container isn't a
-// real access boundary the way loopback is on a bare host — a page loaded in
-// a browser on the LAN can rebind its own hostname to this container's IP
-// and drive tools (including writes) as a confused deputy, entirely
-// bypassing "LAN-only" as a security posture. The MCP SDK's built-in
-// allowedHosts/allowedOrigins are deprecated in favor of external
-// middleware, so it's handled here instead. Required (not opt-in) in HTTP
-// mode: an HTTP MCP server with no Host allowlist at all is the gap, not a
-// degraded-but-working default.
-const MCP_ALLOWED_HOSTS = (process.env.MCP_ALLOWED_HOSTS ?? "")
-  .split(",")
-  .map((h) => h.trim())
-  .filter(Boolean);
-// Origins are a browser-only concept; a legitimate non-browser client (the
-// mcp-remote bridge, a direct fetch) never sends one. Default empty means
-// "reject every browser-originated request" — the correct posture for a
-// pure machine-to-machine API where the only requests that should ever
-// carry an Origin header are exactly the DNS-rebinding attack this guards
-// against.
-const MCP_ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-if (port && MCP_ALLOWED_HOSTS.length === 0) {
-  log.error(
-    "startup",
-    "MCP_ALLOWED_HOSTS is required in HTTP mode: comma-separated Host header values this server accepts on /mcp (e.g. 'your-nas:3001'). Defends against DNS rebinding — see docker-deployments.md rule #8.",
-  );
-  process.exit(1);
-}
-
-// Idle MCP sessions leak otherwise: transports only get cleaned up via
-// client-initiated onclose (a DELETE, or a graceful disconnect). A client
-// that disappears uncleanly — crash, network drop, laptop closed mid-session
-// — leaves its transport (and session-id map entry) resident forever in this
-// long-running container.
-const SESSION_IDLE_TIMEOUT_MS =
-  Number.parseInt(process.env.MCP_SESSION_IDLE_TIMEOUT_MS ?? "", 10) ||
-  3_600_000;
+const {
+  port,
+  allowedHosts: MCP_ALLOWED_HOSTS,
+  allowedOrigins: MCP_ALLOWED_ORIGINS,
+  sessionIdleTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+} = config;
 
 if (port) {
   // HTTP transport (long-lived server, e.g. for Portainer/Compose deployment).

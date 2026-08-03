@@ -1,11 +1,13 @@
 # Status
 
-**Last updated:** 2026-08-03 (MCP-F01/F02 shipped — outbound Plex
-requests now carry a bound timeout + bounded 429 retry via a shared
-chokepoint. Also this session: MCP-P04/P05 (viewer-IP redaction + log
-verbosity), MCP-P06 (destructive-tool name confirmation), MCP-F03 (HTTP
-transport hardening, verified live), UNI-16 closed as a non-issue for
-this repo's current tree. See "Done" below.)
+**Last updated:** 2026-08-03 (MCP-S01 closed — `src/config.ts` added for
+the eagerly-validated startup vars; full `src/shared/` template match
+declined with reasoning on record. **Fleet standards-audit issue #8 is
+now fully closed** — every item fixed or explicitly declined. Also this
+session: MCP-F01/F02 (fetch timeout + bounded retry), MCP-P04/P05
+(viewer-IP redaction + log verbosity), MCP-P06 (destructive-tool name
+confirmation), MCP-F03 (HTTP transport hardening, verified live), UNI-16
+closed as a non-issue. See "Done" below.)
 
 ## Phase
 
@@ -547,6 +549,58 @@ downloader-mcp.
     (verified against a reverted cap — the test times out rather than
     passing, confirming it would actually catch an infinite-retry
     regression), and confirms every call carries a real `AbortSignal`.
+- **MCP-S01 closed — partial adoption, full `src/shared/` template
+  match declined (2026-08-03).** This was the last open item from the
+  fleet standards-audit (issue #8), and the one requiring an actual
+  judgment call rather than a mechanical fix. Enumerated every direct
+  `process.env.*` read across the codebase first: 16, across
+  `src/index.ts` (6), `src/tls.ts` (6), `src/plex.ts` (3), `src/log.ts`
+  (1) — more than the audit's original count of 12, since this
+  session's own MCP-F03/F01 work added new scattered reads
+  (`MCP_ALLOWED_HOSTS`/`ORIGINS`, `MCP_SESSION_IDLE_TIMEOUT_MS`,
+  `MCP_FETCH_TIMEOUT_MS`).
+  - **Declined:** moving `src/log.ts`'s `LOG_LEVEL` parsing,
+    `src/tools/helpers.ts`'s annotation constants /
+    `redactSessionPlayerAddress`, and `src/version.ts` into a literal
+    `src/shared/` directory tree matching the template's file names
+    (`text.ts`, `annotations.ts`, `redact.ts`, `version.ts`). All three
+    already work, are already tested, and already live in sensible
+    places — moving them is pure file-shuffling for template
+    conformance, with real churn (every `tools/*.ts` import path
+    changes) and zero behavior improvement. Matches this repo's
+    "don't rewrite what works" default.
+  - **Declined, more carefully:** centralizing `src/tls.ts`'s
+    `MCP_TLS_*` vars into an eager config read. These are deliberately
+    read *lazily*, only inside `resolveTlsCredentials()`, which only
+    runs in HTTP+TLS mode. Forcing them into module-load-time reads
+    (what a naive `config.ts` would do) would be a real behavior
+    change: an invalid `MCP_TLS_DAYS` would start failing *stdio-mode*
+    startups it has zero effect on today. Same reasoning for
+    `src/plex.ts`'s `MCP_IMAGE_SAVE_DIR` / `MCP_IMAGE_MAX_BYTES` /
+    `MCP_FETCH_TIMEOUT_MS` — already behind tested pure `resolve*()`
+    functions, read once per call; moving to eager per-construction
+    reads is a negligible behavioral difference (env vars don't change
+    during a running container's life) not worth the risk for this
+    session's remaining scope.
+  - **Adopted:** the part of MCP-S01 that was a genuine, safe win —
+    added `src/config.ts` centralizing the 6 vars that were *already*
+    read and validated eagerly at module-load time in `src/index.ts`
+    (`PLEX_URL`, `PLEX_TOKEN`, `MCP_PORT`, `MCP_ALLOWED_HOSTS`,
+    `MCP_ALLOWED_ORIGINS`, `MCP_SESSION_IDLE_TIMEOUT_MS`), preserving
+    their exact validate-or-`exit(1)` semantics byte-for-byte — same
+    timing, same messages, just relocated from ~40 scattered lines in
+    `index.ts` into one module. `index.ts` now destructures `config`
+    instead of reading `process.env` directly.
+  - Verified behavior-preservation with real `docker build`/`run`
+    across all paths: missing `PLEX_URL`/`PLEX_TOKEN` → exit 1, same
+    message; invalid `MCP_PORT` → exit 1, same message; HTTP mode
+    missing `MCP_ALLOWED_HOSTS` → exit 1, same message; valid HTTP
+    config → starts and reports healthy; stdio mode → real MCP
+    `initialize` handshake succeeds, correct `serverInfo.version`. All
+    five identical to pre-refactor behavior.
+  - This closes [issue #8](https://github.com/CarlDog/plex-mcp/issues/8)
+    — every item from the 2026-07-25 fleet standards audit is now
+    either fixed or explicitly declined with reasoning on record.
 
 ## Next
 

@@ -29,6 +29,16 @@ the work rather than after the fact.
   `docker-publish.yml` so a red `main` can no longer ship `:latest`.
 - Non-networked regression tests: `tests/image-url-guard.test.ts`,
   `tests/image-max-bytes.test.ts`.
+- `src/config.ts` (MCP-S01, partial): centralizes the env vars that were
+  already read and validated eagerly at module-load time in
+  `src/index.ts` — `PLEX_URL`, `PLEX_TOKEN`, `MCP_PORT`,
+  `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS`,
+  `MCP_SESSION_IDLE_TIMEOUT_MS` — into one module, preserving their
+  exact validate-or-exit(1) behavior. Deliberately doesn't cover
+  `src/tls.ts`'s vars (read lazily, only in HTTP+TLS mode — centralizing
+  them would make an invalid `MCP_TLS_DAYS` fail stdio-mode startups it
+  doesn't affect today) or `src/plex.ts`'s per-call vars (already behind
+  tested pure `resolve*()` functions).
 
 ### Changed
 
