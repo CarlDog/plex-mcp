@@ -1,11 +1,11 @@
 # Status
 
-**Last updated:** 2026-08-03 (MCP-P04/P05 shipped — `plex_now_playing`
-no longer leaks a viewer's LAN/public IP, tool-arg values moved from
-`info` to `debug` logging. Also this session: MCP-P06 destructive-tool
-name confirmation, MCP-F03 HTTP transport hardening (verified live),
-UNI-16 closed as a non-issue for this repo's current tree. See "Done"
-below.)
+**Last updated:** 2026-08-03 (MCP-F01/F02 shipped — outbound Plex
+requests now carry a bound timeout + bounded 429 retry via a shared
+chokepoint. Also this session: MCP-P04/P05 (viewer-IP redaction + log
+verbosity), MCP-P06 (destructive-tool name confirmation), MCP-F03 (HTTP
+transport hardening, verified live), UNI-16 closed as a non-issue for
+this repo's current tree. See "Done" below.)
 
 ## Phase
 
@@ -523,6 +523,30 @@ downloader-mcp.
     `tests/log-verbosity.test.ts`; both verified against a reverted
     regression (removed the `remotePublicAddress` redaction / reverted
     the log split, confirmed each test fails, reverted back).
+- **MCP-F01/F02 fetch timeout + bounded 429 retry closed (2026-08-03).**
+  All three outbound Plex fetch call sites (`request`,
+  `requestNoContent`, `fetchBinary` in `src/plex.ts`) previously called
+  `fetch()` directly with no timeout and no retry handling. Extracted a
+  shared `fetchWithTimeoutAndRetry()` private method — a single
+  chokepoint all three now route through, rather than duplicating
+  timeout/retry logic three times:
+  - Every call carries `AbortSignal.timeout(MCP_FETCH_TIMEOUT_MS)`
+    (default 30s, optional/Portainer-overridable) — a hung or
+    half-open Plex server can no longer block a tool call indefinitely.
+  - A `429` response is retried up to 2 times, honoring `Retry-After`
+    (seconds or an HTTP-date, both parsed) bounded to a 30s cap — an
+    unbounded wait on a large header value would otherwise stall the
+    whole request queue behind one call. Exhausting the retries
+    surfaces the 429 as a normal tool error.
+  - 13 new tests (`tests/fetch-timeout-retry.test.ts`): unit coverage
+    for the two pure helpers (`resolveFetchTimeoutMs`,
+    `parseRetryAfterMs` — bounds, HTTP-date parsing, malformed-header
+    fallback) plus a wiring suite that mocks global `fetch` and drives
+    an actual public `PlexClient` method end-to-end: retries once on
+    429 then succeeds, gives up after the cap without retrying forever
+    (verified against a reverted cap — the test times out rather than
+    passing, confirming it would actually catch an infinite-retry
+    regression), and confirms every call carries a real `AbortSignal`.
 
 ## Next
 

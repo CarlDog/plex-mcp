@@ -100,6 +100,15 @@ the work rather than after the fact.
   — user content like `plex_search.query`, `plex_edit_metadata.fields.*`,
   and `plex_save_image.filename` landed in default-level container logs.
   `info` now logs only argument *keys*; full values moved to `debug`.
+- Fetch timeout + bounded 429 retry (MCP-F01/F02). All three outbound
+  Plex requests (`request`, `requestNoContent`, `fetchBinary`) now route
+  through a shared `fetchWithTimeoutAndRetry()` chokepoint in
+  `src/plex.ts`: every call carries an `AbortSignal.timeout()`
+  (`MCP_FETCH_TIMEOUT_MS`, default 30s) so a hung or half-open Plex
+  server can't block a tool call indefinitely, and a `429` is retried up
+  to twice honoring `Retry-After` — bounded to 30s so a large header
+  value can't stall the request queue, giving up and surfacing the 429
+  as an error instead.
 
 ## [0.7.1] - 2026-05-17
 

@@ -25,6 +25,40 @@ export function resolveImageMaxBytes(raw: string | undefined): number {
   return Number.isNaN(parsed) ? DEFAULT_IMAGE_MAX_BYTES : parsed;
 }
 
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
+const MAX_RETRY_AFTER_MS = 30_000;
+const MAX_RETRIES_ON_429 = 2;
+const DEFAULT_RETRY_BACKOFF_MS = 1_000;
+
+/**
+ * Parse MCP_FETCH_TIMEOUT_MS the same way as resolveImageMaxBytes —
+ * unset/empty/non-numeric all fall back to the default (MCP-F01).
+ */
+export function resolveFetchTimeoutMs(raw: string | undefined): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isNaN(parsed) ? DEFAULT_FETCH_TIMEOUT_MS : parsed;
+}
+
+/**
+ * Parse a Retry-After header (seconds, or an HTTP-date per RFC 9110)
+ * into milliseconds, bounded to MAX_RETRY_AFTER_MS. An unbounded wait on
+ * a large Retry-After would stall the whole request queue behind one
+ * call (MCP-F02) — bounding it means we give up and surface the 429
+ * as an error instead of hanging indefinitely.
+ */
+export function parseRetryAfterMs(header: string | null): number {
+  if (!header) return DEFAULT_RETRY_BACKOFF_MS;
+  const seconds = Number.parseInt(header, 10);
+  if (!Number.isNaN(seconds)) {
+    return Math.min(Math.max(seconds, 0) * 1000, MAX_RETRY_AFTER_MS);
+  }
+  const dateMs = Date.parse(header);
+  if (!Number.isNaN(dateMs)) {
+    return Math.min(Math.max(dateMs - Date.now(), 0), MAX_RETRY_AFTER_MS);
+  }
+  return DEFAULT_RETRY_BACKOFF_MS;
+}
+
 export class PlexClient {
   private machineIdentifier: string | undefined;
 
@@ -114,6 +148,36 @@ export class PlexClient {
     await this.requestNoContent(`/playlists/${playlistId}`, {}, "DELETE");
   }
 
+  /**
+   * fetch() with a bound timeout (MCP-F01) and bounded 429 retry
+   * honoring Retry-After (MCP-F02). A hung/half-open Plex server would
+   * otherwise block a tool call indefinitely — every call site routes
+   * through this one chokepoint rather than calling fetch() directly.
+   */
+  private async fetchWithTimeoutAndRetry(
+    url: URL,
+    init: RequestInit,
+  ): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(
+          resolveFetchTimeoutMs(process.env.MCP_FETCH_TIMEOUT_MS),
+        ),
+      });
+      if (res.status !== 429 || attempt >= MAX_RETRIES_ON_429) {
+        return res;
+      }
+      const waitMs = parseRetryAfterMs(res.headers.get("retry-after"));
+      log.warn("plex", "429 rate limited, retrying", {
+        url: url.pathname,
+        attempt: attempt + 1,
+        waitMs,
+      });
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+
   private async request<T>(
     path: string,
     params: Record<string, string> = {},
@@ -128,7 +192,7 @@ export class PlexClient {
     log.debug("plex", "request", { method, path });
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.fetchWithTimeoutAndRetry(url, {
         method,
         headers: {
           "X-Plex-Token": this.config.token,
@@ -184,7 +248,7 @@ export class PlexClient {
     log.debug("plex", "request", { method, path });
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.fetchWithTimeoutAndRetry(url, {
         method,
         headers: { "X-Plex-Token": this.config.token },
       });
@@ -855,7 +919,7 @@ export class PlexClient {
     log.debug("plex", "fetch binary", { path });
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await this.fetchWithTimeoutAndRetry(url, {
         headers: {
           "X-Plex-Token": this.config.token,
           Accept: "image/*",

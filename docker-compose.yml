@@ -38,6 +38,10 @@ services:
       # (no activity, not total lifetime). Default 1 hour. Guards against
       # sessions leaking forever when a client disappears uncleanly.
       MCP_SESSION_IDLE_TIMEOUT_MS: "${MCP_SESSION_IDLE_TIMEOUT_MS:-3600000}"
+      # Optional: timeout in milliseconds for every outbound request to
+      # Plex (MCP-F01). A hung or half-open Plex server would otherwise
+      # block a tool call indefinitely. Default 30s.
+      MCP_FETCH_TIMEOUT_MS: "${MCP_FETCH_TIMEOUT_MS:-30000}"
       # Optional HTTPS — pick ONE of the two modes below.
       #
       # (a) Self-managed cert (recommended for LAN-only deployment):
