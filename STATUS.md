@@ -1,8 +1,9 @@
 # Status
 
-**Last updated:** 2026-07-31 (`HOST_IMAGE_DIR` documented as REQUIRED
-for Portainer git-stack deploys after the relative compose default
-took the deployment down ~10h — see "Done" below.)
+**Last updated:** 2026-08-03 (MCP-F03 HTTP transport hardening shipped
+and verified live — `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`
+DNS-rebinding guard + idle-session eviction. UNI-16 closed as a
+non-issue for this repo's current tree. See "Done" below.)
 
 ## Phase
 
