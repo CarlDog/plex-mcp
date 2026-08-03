@@ -71,7 +71,12 @@ the work rather than after the fact.
   IP and drive tools (including writes) as a confused deputy. Idle MCP
   sessions are now swept and closed after `MCP_SESSION_IDLE_TIMEOUT_MS`
   (default 1h) of inactivity, since a client that disappears uncleanly
-  previously leaked its transport forever.
+  previously leaked its transport forever. To let a sibling MCP container
+  on the same Docker host call `/mcp` too, add
+  `host.docker.internal:<HOST_PORT>` to the stack's `MCP_ALLOWED_HOSTS`
+  value explicitly — kept as a plain operator-set allowlist entry rather
+  than templated into `docker-compose.yml`, since this is a security
+  policy, not a harmless convenience default.
 
 ## [0.7.1] - 2026-05-17
 

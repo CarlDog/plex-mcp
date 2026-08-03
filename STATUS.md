@@ -411,6 +411,22 @@ downloader-mcp.
     `MCP_ALLOWED_HOSTS` exits 1 at startup; correct Host reaches the
     handler; wrong Host → 421; correct Host + disallowed Origin → 403;
     `/health` stays 200 regardless of Host.
+    Considered auto-appending `host.docker.internal:${HOST_PORT}` in
+    `docker-compose.yml` so a sibling MCP container on the same Docker
+    host (reaching back in via the published port, not the internal
+    Docker network) could call this server without a second stack-env
+    edit — reversed that after pushback: `MCP_ALLOWED_HOSTS` is a
+    security allowlist, not a harmless convenience default like
+    `extra_hosts`, so templating part of it into compose would make the
+    real effective policy invisible from the stack's env list alone
+    (you'd have to cross-reference the compose file too) and would
+    remove the operator's ability to opt out. Stays a plain
+    operator-set stack-env value instead, same as `PLEX_URL`/
+    `PLEX_TOKEN`/`HOST_IMAGE_DIR` — add `host.docker.internal:<port>`
+    to it explicitly if a sibling MCP needs access. Verified locally
+    with both entries present: the LAN hostname and
+    `host.docker.internal:<port>` both reach the handler; an unrelated
+    host is still rejected with 421.
   - **Idle-session eviction — added.** `transports` previously only
     cleaned up via client-initiated `onclose`; a client that disappears
     uncleanly (crash, network drop) leaked its session forever in this
