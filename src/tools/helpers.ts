@@ -71,6 +71,33 @@ export function assertNameMatches(
   }
 }
 
+const REDACTED = "[redacted]";
+
+/**
+ * Strip client network-location fields from a plex_now_playing session
+ * before it's returned (MCP-P04). Plex's live /status/sessions payload
+ * includes a Player object carrying the viewing client's LAN address
+ * (`address`) and, for sessions Plex sees as remote, its real public IP
+ * (`remotePublicAddress`) — confirmed against a live capture, not just
+ * the docs. Neither has anything to do with what this tool is for
+ * (what's playing right now); both are the kind of viewer PII the
+ * response shouldn't carry incidentally. This is deliberately narrow —
+ * a fix for the one concrete exposure the audit found, not a general
+ * response sanitizer. plex_history's entries carry no Player object at
+ * all (verified against a live capture), so nothing to redact there.
+ */
+export function redactSessionPlayerAddress(session: unknown): unknown {
+  if (typeof session !== "object" || session === null) return session;
+  const player = (session as Record<string, unknown>).Player;
+  if (typeof player !== "object" || player === null) return session;
+  const redactedPlayer = { ...(player as Record<string, unknown>) };
+  if ("address" in redactedPlayer) redactedPlayer.address = REDACTED;
+  if ("remotePublicAddress" in redactedPlayer) {
+    redactedPlayer.remotePublicAddress = REDACTED;
+  }
+  return { ...(session as Record<string, unknown>), Player: redactedPlayer };
+}
+
 // Per the MCP spec + ChatGPT Apps SDK metadata guide
 // (docs/CHATGPT-APPS-SDK.md), tool annotations are hints to the
 // client about a tool's behavior. They aren't enforced — clients
@@ -137,14 +164,21 @@ type ToolHandler<A extends ToolArgs> = (args: A) => Promise<ToolResult>;
 
 /**
  * Wrap a tool handler with structured logging:
- * - Logs an `invoke` line at info with the tool's args.
+ * - Logs an `invoke` line at info with the tool's arg *keys* only.
+ * - Logs a second `invoke` line at debug with the full arg values.
  * - Logs an `ok` line at info with elapsed ms.
  * - Logs an `error` line at error with elapsed ms + the error message,
  *   then re-throws so the MCP framework still surfaces an error result.
  *
- * Args values are logged verbatim — they are rating keys, section ids,
- * queries, etc. None are secret per our threat model (PLEX_TOKEN never
- * appears in tool args; it's a header inside PlexClient).
+ * Values (MCP-P05) — not just secrets — land in this split. None of our
+ * args are ever secret (PLEX_TOKEN never appears in tool args; it's a
+ * header inside PlexClient), but several carry real user content:
+ * plex_search.query, plex_edit_metadata.fields.title/summary,
+ * plex_save_image.filename. That content doesn't need to sit in the
+ * default-level container logs of every session — keys-only at info
+ * (which tool, which fields were passed) is enough for normal
+ * operation; full values are one LOG_LEVEL=debug away when actually
+ * debugging.
  */
 export function withLogging<A extends ToolArgs>(
   name: string,
@@ -152,7 +186,8 @@ export function withLogging<A extends ToolArgs>(
 ): ToolHandler<A> {
   return async (args: A) => {
     const start = Date.now();
-    log.info(`tool:${name}`, "invoke", args);
+    log.info(`tool:${name}`, "invoke", { keys: Object.keys(args) });
+    log.debug(`tool:${name}`, "invoke", args);
     try {
       const result = await handler(args);
       log.info(`tool:${name}`, "ok", { ms: Date.now() - start });

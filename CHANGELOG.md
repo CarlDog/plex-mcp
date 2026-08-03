@@ -90,6 +90,16 @@ the work rather than after the fact.
   Unlike a bare `confirm: true` flag (advisory — an autonomous agent can
   always self-supply it), a wrong id resolves to a *different* item whose
   real title won't match what the caller expected.
+- Redaction + log verbosity (MCP-P04/P05). `plex_now_playing` was
+  returning each session's `Player.address` (LAN IP) and
+  `Player.remotePublicAddress` (the viewer's real public IP) raw — both
+  confirmed against a live capture, neither relevant to what's playing.
+  Both are now redacted. `plex_history` carries no `Player` object at
+  all (also confirmed live), so nothing to redact there. Separately,
+  tool invocations previously logged full argument *values* at `info`
+  — user content like `plex_search.query`, `plex_edit_metadata.fields.*`,
+  and `plex_save_image.filename` landed in default-level container logs.
+  `info` now logs only argument *keys*; full values moved to `debug`.
 
 ## [0.7.1] - 2026-05-17
 

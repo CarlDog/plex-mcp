@@ -3,7 +3,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { PlexClient } from "../plex.js";
-import { READ_ONLY_ANNOTATIONS, asText, withLogging } from "./helpers.js";
+import {
+  READ_ONLY_ANNOTATIONS,
+  asText,
+  redactSessionPlayerAddress,
+  withLogging,
+} from "./helpers.js";
 
 export function registerSessionsTools(
   server: McpServer,
@@ -14,13 +19,14 @@ export function registerSessionsTools(
     {
       title: "Plex Now Playing",
       description:
-        "Get currently-playing sessions on the Plex server. Each session includes the item being played, the user, player device, and transcoding info.",
+        "Get currently-playing sessions on the Plex server. Each session includes the item being played, the user, player device, and transcoding info. Player network-location fields (LAN/public IP) are redacted — irrelevant to what's playing and unnecessary viewer PII in the response.",
       inputSchema: {},
       annotations: READ_ONLY_ANNOTATIONS,
     },
-    withLogging("plex_now_playing", async () =>
-      asText(await plex.nowPlaying()),
-    ),
+    withLogging("plex_now_playing", async () => {
+      const sessions = await plex.nowPlaying();
+      return asText(sessions.map(redactSessionPlayerAddress));
+    }),
   );
 
   server.registerTool(

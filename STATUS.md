@@ -1,10 +1,11 @@
 # Status
 
-**Last updated:** 2026-08-03 (MCP-P06 destructive-tool name confirmation
-shipped — `plex_delete_playlist`/`plex_split_item`/`plex_merge_items`
-now refuse on a resolved-title mismatch. Also this session: MCP-F03
-HTTP transport hardening shipped and verified live, UNI-16 closed as a
-non-issue for this repo's current tree. See "Done" below.)
+**Last updated:** 2026-08-03 (MCP-P04/P05 shipped — `plex_now_playing`
+no longer leaks a viewer's LAN/public IP, tool-arg values moved from
+`info` to `debug` logging. Also this session: MCP-P06 destructive-tool
+name confirmation, MCP-F03 HTTP transport hardening (verified live),
+UNI-16 closed as a non-issue for this repo's current tree. See "Done"
+below.)
 
 ## Phase
 
@@ -496,6 +497,32 @@ downloader-mcp.
   tests proving each tool actually refuses the mismatched case and
   never calls its destructive PlexClient method — not just that the
   helper exists somewhere unused).
+- **MCP-P04/P05 redaction + log verbosity closed (2026-08-03).**
+  Verified both findings against a live capture rather than trusting
+  the audit's description at face value (per this repo's own
+  api-integration.md rule) — called the real `plex_now_playing` and
+  `plex_history` directly:
+  - `plex_now_playing`'s session payload really does carry
+    `Player.address` (the client's LAN IP) and
+    `Player.remotePublicAddress` (a real public IP) — confirmed on the
+    live server. Neither is relevant to "what's playing right now."
+    Added `redactSessionPlayerAddress()` in `src/tools/helpers.ts`,
+    applied narrowly to `plex_now_playing` only — this is a fix for
+    the one concrete exposure the audit found, not a general response
+    sanitizer. `plex_history`'s entries carry no `Player` object at all
+    (also confirmed live — just opaque `accountID`/`deviceID`), so
+    nothing to redact there; scope stayed matched to what's real.
+  - `withLogging()` (`src/tools/helpers.ts`) previously logged full
+    tool-argument values at `info` on every invocation. Split into two
+    lines: `info` now logs only `{ keys: Object.keys(args) }`; a new
+    `debug`-level line carries the full values. Real user content that
+    was landing in default-level container logs — `plex_search.query`,
+    `plex_edit_metadata.fields.title/summary`,
+    `plex_save_image.filename` — now requires `LOG_LEVEL=debug` to see.
+  - Added `tests/redact-session-player.test.ts` and
+    `tests/log-verbosity.test.ts`; both verified against a reverted
+    regression (removed the `remotePublicAddress` redaction / reverted
+    the log split, confirmed each test fails, reverted back).
 
 ## Next
 
