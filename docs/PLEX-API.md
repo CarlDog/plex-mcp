@@ -159,6 +159,68 @@ Recipe for safely re-grouping a split-then-re-matched item:
 3. For items that should keep the original GUID (e.g. correctly-bound
    variants), `plex_merge_items` explicitly to consolidate.
 
+### Editions — multiple versions of one title via `{edition-<name>}` filenames + `editionTitle`
+
+Plex's Editions feature lets several versions of the same title (a
+theatrical cut vs. an extended cut, or — per the WWE PPV convention
+below — night 1 vs. night 2 of a two-night event) live under one
+library tile with a picker, instead of showing up as unrelated
+duplicates. **Corrects an earlier assumption**: `editionTitle` was
+believed to live on the `Media[]` entry (one item, N Media variants).
+Live data shows the opposite — confirmed against two real,
+independent examples on this server (2026-08-03):
+
+```
+143136 | Deadpool 2 | editionTitle: Theatrical      | guid: plex://movie/5d776c1c51dd69001fe37d4f
+143147 | Deadpool 2 | editionTitle: Super Duper Cut  | guid: plex://movie/5d776c1c51dd69001fe37d4f
+
+208901 | WWE WrestleMania 42 | editionTitle: Saturday | guid: plex://movie/67ba7960333cb35c1b31ccfa
+208902 | WWE WrestleMania 42 | editionTitle: Sunday   | guid: plex://movie/67ba7960333cb35c1b31ccfa
+```
+
+- **`editionTitle` is a top-level item field**, not a `Media[]` field
+  — every `Media[]` entry checked had `editionTitle: null`/absent
+  while the item itself carried the real value. Readable via
+  `plex_get_item` or a `plex_browse`/`plex_search` `fields=[...]`
+  projection.
+- **Each edition is a separate item** (its own `ratingKey`), not a
+  Media variant of one item. What ties them together is a **shared
+  `guid`** — `plex_browse`'s existing `collection` filter doesn't
+  cover this; finding "all editions of X" means browsing/searching
+  and client-side filtering by matching `guid`, excluding the current
+  `ratingKey`. This matches python-plexapi's own `editions()`
+  implementation (`plexapi/mixins/editions.py`): `search(filters=
+  {'guid': self.guid, 'id!': self.ratingKey})`. No dedicated plex-mcp
+  tool for this yet.
+- **Plex's scanner sets `editionTitle` from a `{edition-<name>}` tag
+  in the filename**, confirmed directly from the two Deadpool 2
+  files' real paths on this server:
+  ```
+  Deadpool 2 (2018) {imdb-tt5463162} {edition-Theatrical} [Bluray-1080p]...mkv
+  Deadpool 2 (2018) {imdb-tt5463162} {edition-Super Duper Cut} [Bluray-1080p]...mkv
+  ```
+  Both files live in the same folder; the bracketed `{edition-X}` tag
+  becomes the item's `editionTitle` verbatim on scan. **No tag at
+  all** means no edition — most items (e.g. `WWE Royal Rumble`, which
+  has two same-titled-but-different-`guid` entries for different
+  years) aren't editions of each other just because they share a
+  title; Plex disambiguates those by year in its UI instead. Sharing
+  a `guid` **and** having an `editionTitle` is what makes two items
+  editions of one another.
+- **Why this matters over `plex_split_item`/`plex_apply_match`**:
+  Editions is the tool for the exact problem the "Auto-merge" gotcha
+  above describes. Fighting Plex's auto-merge with `split`+`unmatch`
+  to keep related variants as visually-distinct items only lasts
+  until the next rescan re-merges them. Editions embraces the merge
+  instead — separate items, same `guid`, disambiguated by
+  `editionTitle` — which is stable across rescans because it's not
+  fighting anything Plex's scanner does natively. Operational
+  recipe: one folder per title, one file per edition inside it, each
+  filename carrying `{edition-<Name>}`; `plex_refresh_section` after
+  disk changes to pick up new/renamed files. Trade-off: watch counts
+  and ratings track per-item (i.e. per-edition), not aggregated
+  across all editions of a title.
+
 ### `/photo/:/transcode` rejects width-only or height-only requests
 
 The image-resize endpoint takes `url=` (a relative path to the

@@ -13,7 +13,11 @@ live. Then shipped poster management (`plex_list_posters`/
 speculative design after researching python-plexapi's real source —
 upload and select turned out to be separate operations, and live
 testing found Plex auto-selects uploads server-side regardless. Suite
-is 121/121 green. See "Done" below.)
+is 121/121 green. Then documented Editions in `docs/PLEX-API.md`,
+correcting a wrong assumption along the way — `editionTitle` is a
+top-level item field (separate items sharing a `guid`), not a
+`Media[]` field — verified against two real live examples. See "Done"
+below.)
 
 ## Phase
 
@@ -798,6 +802,36 @@ downloader-mcp.
     specific unselected candidate — documented in `docs/PLEX-API.md`
     rather than worked around.
 
+- **Editions documented in `docs/PLEX-API.md` (2026-08-03).** Docs-only;
+  no code changed.
+  - **Corrected a wrong assumption in the process.** An earlier
+    session note claimed `editionTitle` lives on a `Media[]` entry
+    (one item, N Media variants per edition). Live data says the
+    opposite: `editionTitle` is a **top-level item field**, and each
+    edition is a **separate item** (its own `ratingKey`) sharing the
+    same `guid` — `Media[].editionTitle` was `null`/absent on every
+    example checked.
+  - **Verified against two independent real examples** on this
+    server, prompted mid-task by a second one worth checking:
+    Deadpool 2 (`editionTitle: "Theatrical"` / `"Super Duper Cut"`)
+    and WWE WrestleMania 42 (`"Saturday"` / `"Sunday"`) — both pairs
+    share one `guid`, differ only in `ratingKey` and `editionTitle`.
+    Deadpool 2's real on-disk filenames confirmed the `{edition-<name>}`
+    tag Plex's scanner reads verbatim into `editionTitle`.
+  - **python-plexapi cross-check**: `editionTitle` doesn't appear
+    anywhere in python-plexapi's source at all (the wrapper doesn't
+    model this field), but `plexapi/mixins/editions.py`'s
+    `editions()` method — `search(filters={'guid': self.guid, 'id!':
+    self.ratingKey})` — independently confirms the "separate items,
+    shared guid" mechanism, matching the live data exactly.
+  - Documented as a new gotcha in `docs/PLEX-API.md`, positioned
+    right after "Auto-merge: `apply_match` triggers it, `split`
+    doesn't" since Editions is the tool for the exact problem that
+    gotcha describes — embracing Plex's auto-merge (shared `guid`,
+    disambiguated by `editionTitle`) instead of fighting it with
+    `split`/`unmatch`, which only holds until the next rescan
+    re-merges things.
+
 ## Next
 
 - **ChatGPT Apps SDK alignment — Phase 1 done, Phases 2–4 not
@@ -868,12 +902,14 @@ downloader-mcp.
      Remaining narrower gap: still opt-in per call, not default-on —
      revisit only if a future item's Media-variant count blows the
      cap again with `minimal` already set.
-  2. **Document Editions thoroughly in `docs/PLEX-API.md`.** The
-     `editionTitle` field, the `{edition-<name>}` filename tag
-     Plex's scanner reads, and the consolidation recipe (multi-
-     night events sharing one IMDB/GUID → Editions instead of
-     fighting auto-merge with split/unmatch). This session
-     codified the convention; the API doc should reflect it.
+  2. ~~Document Editions thoroughly in `docs/PLEX-API.md`~~ —
+     **shipped 2026-08-03**. Corrected a wrong assumption in the
+     process: `editionTitle` is a top-level item field, not a
+     `Media[]` field (each edition is a separate item sharing a
+     `guid`, not one item with N Media variants) — verified live
+     against two real examples (Deadpool 2's Theatrical/Super Duper
+     Cut, WWE WrestleMania 42's Saturday/Sunday), including the raw
+     `{edition-<name>}` filenames on disk.
   3. **Document the `tv.plex.agents.none://<rating_key>` GUID
      format** for unmatched items. Useful for tooling that
      distinguishes matched vs unmatched without parsing the
