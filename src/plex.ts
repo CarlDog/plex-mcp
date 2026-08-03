@@ -923,54 +923,21 @@ export class PlexClient {
     const baseDir = process.env.MCP_LOG_SAVE_DIR ?? "/data/logs";
     ensureSaveDir(baseDir, "downloadLogs", "MCP_LOG_SAVE_DIR");
 
-    const endpoint = "/diagnostics/logs";
-    const url = new URL(endpoint, this.config.url);
-    const start = Date.now();
-    log.debug("plex", "fetch logs", {});
-    let res: Response;
-    try {
-      res = await this.fetchWithTimeoutAndRetry(
-        url,
-        { headers: { "X-Plex-Token": this.config.token } },
-        resolveLogFetchTimeoutMs(process.env.MCP_LOG_FETCH_TIMEOUT_MS),
-      );
-    } catch (err) {
-      log.error("plex", "network error", {
-        path: endpoint,
-        ms: Date.now() - start,
-        msg: (err as Error).message,
-      });
-      throw err;
-    }
-    const ms = Date.now() - start;
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      log.warn("plex", "http error", {
-        path: endpoint,
-        status: res.status,
-        ms,
-      });
-      throw new Error(
-        `Plex ${res.status} ${res.statusText} for GET ${endpoint}: ${body.slice(0, 200)}`,
-      );
-    }
-
-    const cap = resolveLogMaxBytes(process.env.MCP_LOG_MAX_BYTES);
-    const contentLength = res.headers.get("content-length");
-    if (contentLength && Number.parseInt(contentLength, 10) > cap) {
-      throw new Error(
-        `Plex logs bundle is ${contentLength} bytes, exceeds MCP_LOG_MAX_BYTES=${cap}.`,
-      );
-    }
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength > cap) {
-      throw new Error(
-        `Plex logs bundle is ${buffer.byteLength} bytes (no content-length header), exceeds MCP_LOG_MAX_BYTES=${cap}.`,
-      );
-    }
-
-    const rawType = res.headers.get("content-type") ?? "application/zip";
-    const mimeType = rawType.split(";")[0]!.trim();
+    const url = new URL("/diagnostics/logs", this.config.url);
+    const { buffer, mimeType } = await this.fetchCappedBinary(
+      url,
+      { "X-Plex-Token": this.config.token },
+      {
+        cap: resolveLogMaxBytes(process.env.MCP_LOG_MAX_BYTES),
+        capEnvVarName: "MCP_LOG_MAX_BYTES",
+        subject: "Plex logs bundle",
+        defaultMimeType: "application/zip",
+        logLabel: "logs",
+        timeoutMsOverride: resolveLogFetchTimeoutMs(
+          process.env.MCP_LOG_FETCH_TIMEOUT_MS,
+        ),
+      },
+    );
 
     const savePath = writeBytesToPath(
       baseDir,
@@ -1112,6 +1079,93 @@ export class PlexClient {
     );
   }
 
+  /**
+   * Fetch a URL through the timeout+retry chokepoint and enforce a
+   * byte cap in two stages — the content-length header (cheap, catches
+   * most oversized responses before download) and the actual decoded
+   * byte count (in case a server lies about or omits content-length) —
+   * then resolve a MIME type from content-type. Shared by fetchBinary/
+   * downloadLogs so this fetch/error/cap-check contract can't drift
+   * between the two binary-fetch call sites (phase-end audit finding,
+   * 2026-08-03). Callers own anything specific to their call site: URL
+   * construction/safety checks, extra headers, and the cap's source.
+   */
+  private async fetchCappedBinary(
+    url: URL,
+    headers: Record<string, string>,
+    opts: {
+      cap: number;
+      capEnvVarName: string;
+      subject: string;
+      defaultMimeType: string;
+      logLabel: string;
+      timeoutMsOverride?: number;
+      advice?: string;
+    },
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
+    const {
+      cap,
+      capEnvVarName,
+      subject,
+      defaultMimeType,
+      logLabel,
+      timeoutMsOverride,
+      advice,
+    } = opts;
+    const path = url.pathname;
+    const start = Date.now();
+    log.debug("plex", `fetch ${logLabel}`, { path });
+    let res: Response;
+    try {
+      res = await this.fetchWithTimeoutAndRetry(
+        url,
+        { headers },
+        timeoutMsOverride,
+      );
+    } catch (err) {
+      log.error("plex", "network error", {
+        path,
+        ms: Date.now() - start,
+        msg: (err as Error).message,
+      });
+      throw err;
+    }
+    const ms = Date.now() - start;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      log.warn("plex", "http error", { path, status: res.status, ms });
+      throw new Error(
+        `Plex ${res.status} ${res.statusText} for GET ${path}: ${body.slice(0, 200)}`,
+      );
+    }
+
+    const adviceSuffix = advice ? ` ${advice}` : "";
+    const contentLength = res.headers.get("content-length");
+    if (contentLength && Number.parseInt(contentLength, 10) > cap) {
+      throw new Error(
+        `${subject} is ${contentLength} bytes, exceeds ${capEnvVarName}=${cap}.${adviceSuffix}`,
+      );
+    }
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.byteLength > cap) {
+      throw new Error(
+        `${subject} is ${buffer.byteLength} bytes (no content-length header), exceeds ${capEnvVarName}=${cap}.${adviceSuffix}`,
+      );
+    }
+
+    const rawType = res.headers.get("content-type") ?? defaultMimeType;
+    const mimeType = rawType.split(";")[0]!.trim();
+    log.debug("plex", `ok ${logLabel}`, {
+      path,
+      status: res.status,
+      ms,
+      bytes: buffer.byteLength,
+      mime: mimeType,
+    });
+    return { buffer, mimeType };
+  }
+
   private async fetchBinary(
     path: string,
     params: Record<string, string> = {},
@@ -1130,57 +1184,18 @@ export class PlexClient {
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
-    const start = Date.now();
-    log.debug("plex", "fetch binary", { path });
-    let res: Response;
-    try {
-      res = await this.fetchWithTimeoutAndRetry(url, {
-        headers: {
-          "X-Plex-Token": this.config.token,
-          Accept: "image/*",
-        },
-      });
-    } catch (err) {
-      log.error("plex", "network error", {
-        path,
-        ms: Date.now() - start,
-        msg: (err as Error).message,
-      });
-      throw err;
-    }
-    const ms = Date.now() - start;
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      log.warn("plex", "http error", { path, status: res.status, ms });
-      throw new Error(
-        `Plex ${res.status} ${res.statusText} for GET ${path}: ${body.slice(0, 200)}`,
-      );
-    }
-
-    const cap = resolveImageMaxBytes(process.env.MCP_IMAGE_MAX_BYTES);
-    const contentLength = res.headers.get("content-length");
-    if (contentLength && Number.parseInt(contentLength, 10) > cap) {
-      throw new Error(
-        `Plex image at ${path} is ${contentLength} bytes, exceeds MCP_IMAGE_MAX_BYTES=${cap}. Pass max_width or max_height to transcode.`,
-      );
-    }
-
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength > cap) {
-      throw new Error(
-        `Plex image at ${path} is ${buffer.byteLength} bytes (no content-length header), exceeds MCP_IMAGE_MAX_BYTES=${cap}. Pass max_width or max_height to transcode.`,
-      );
-    }
-
-    const rawType = res.headers.get("content-type") ?? "image/jpeg";
-    const mimeType = rawType.split(";")[0]!.trim();
-    log.debug("plex", "ok binary", {
-      path,
-      status: res.status,
-      ms,
-      bytes: buffer.byteLength,
-      mime: mimeType,
-    });
+    const { buffer, mimeType } = await this.fetchCappedBinary(
+      url,
+      { "X-Plex-Token": this.config.token, Accept: "image/*" },
+      {
+        cap: resolveImageMaxBytes(process.env.MCP_IMAGE_MAX_BYTES),
+        capEnvVarName: "MCP_IMAGE_MAX_BYTES",
+        subject: `Plex image at ${path}`,
+        defaultMimeType: "image/jpeg",
+        logLabel: "binary",
+        advice: "Pass max_width or max_height to transcode.",
+      },
+    );
     return { bytes: buffer, mimeType };
   }
 }
