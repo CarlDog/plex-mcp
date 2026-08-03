@@ -30,8 +30,9 @@ what's next.
   `LOG_LEVEL` env var). See README for format and levels.
 - `src/tools/` — tool registrations split per domain
   (`discovery.ts`, `sessions.ts`, `playback.ts`, `playlists.ts`,
-  `hubs.ts`). `index.ts` orchestrates via `registerTools(server, plex)`;
-  `helpers.ts` holds shared utilities (`asText`, `withLogging`).
+  `hubs.ts`, `admin.ts`, `images.ts`, `diagnostics.ts`). `index.ts`
+  orchestrates via `registerTools(server, plex)`; `helpers.ts` holds
+  shared utilities (`asText`, `withLogging`).
 - `Dockerfile` — multi-stage build for the runtime image.
 - `docker-compose.yml` — Compose/Portainer deployment using HTTP transport.
 - `docs/PLEX-API.md` — curated reference for the Plex HTTP API: external

@@ -765,12 +765,12 @@ downloader-mcp.
 - **v0.8 candidates (captured 2026-05-11 from WWE PPV
   consolidation + Panty & Stocking multi-episode rename
   session).** Concrete tool / doc gaps observed in actual use:
-  1. **Sparse `fields` projection on `plex_get_item`.** Items
-     with many Media variants blow the MCP response cap — Royal
-     Rumble 2025 had 14 variants, response was 97k characters,
-     forced a dump-file workaround. Same problem `plex_browse`
-     had pre-v0.6; same fix applies. Default-on filter for
-     `Role` / `Producer` / `Stream` arrays would help most.
+  1. ~~Sparse `fields` projection on `plex_get_item`~~ — **shipped**
+     (`minimal`/`fields`, see Done above; the `Stream[]` half also
+     got a follow-up in the 2026-08-03 subtitle-discovery work).
+     Remaining narrower gap: still opt-in per call, not default-on —
+     revisit only if a future item's Media-variant count blows the
+     cap again with `minimal` already set.
   2. **Document Editions thoroughly in `docs/PLEX-API.md`.** The
      `editionTitle` field, the `{edition-<name>}` filename tag
      Plex's scanner reads, and the consolidation recipe (multi-

@@ -10,7 +10,8 @@
 //   would change observable behavior — an invalid MCP_TLS_DAYS would
 //   start failing stdio-mode startups it doesn't affect today.
 // - src/plex.ts's MCP_IMAGE_SAVE_DIR / MCP_IMAGE_MAX_BYTES /
-//   MCP_FETCH_TIMEOUT_MS: already behind well-tested pure resolve*()
+//   MCP_FETCH_TIMEOUT_MS / MCP_LOG_SAVE_DIR / MCP_LOG_MAX_BYTES /
+//   MCP_LOG_FETCH_TIMEOUT_MS: already behind well-tested pure resolve*()
 //   functions, read once per call rather than once at import time. Real
 //   difference is negligible (env vars don't change during a running
 //   container's life) and not worth the churn.

@@ -16,10 +16,12 @@ your Plex libraries.
 | --- | --- |
 | `plex_list_libraries` | List all libraries (sections) on the server |
 | `plex_search` | Search across all libraries |
+| `plex_hub_search` | Search via Plex's hub-search endpoint, including collections (unlike `plex_search`) |
 | `plex_recently_added` | Recently added items, optionally per-section |
 | `plex_on_deck` | Items "on deck" (partially watched / next up) |
-| `plex_get_item` | Metadata for one item by rating key. Pass `minimal=true` to drop bulky cast/crew/image arrays (~80% size reduction on movies with deep casts); pass `fields=[...]` for explicit projection |
-| `plex_browse` | List items in a library section (paged, optional type filter, optional sparse `fields` projection) |
+| `plex_get_item` | Metadata for one item by rating key. Pass `minimal=true` to drop bulky cast/crew/image arrays (~80% size reduction on movies with deep casts) while keeping subtitle-track info; pass `fields=[...]` for explicit projection |
+| `plex_browse` | List items in a library section (paged, optional type filter, optional `collection` title filter, optional sparse `fields` projection) |
+| `plex_list_collections` | List collections in a library section (thin wrapper over `plex_browse`'s collection type) |
 | `plex_get_children` | Children of an item (show→seasons, season→episodes, artist→albums) |
 | `plex_now_playing` | Currently-playing sessions on the server |
 | `plex_history` | Playback history entries (paged, most recent first) |
@@ -45,6 +47,7 @@ your Plex libraries.
 | `plex_merge_items` | Merge other items INTO a target item (sources absorbed; target survives) |
 | `plex_get_image` | Fetch poster/art/banner/clearLogo bytes for an item as an MCP image content block (so vision-capable clients can actually see the picture); optional max_width/max_height routes through Plex's transcoder |
 | `plex_save_image` | Same input surface as `plex_get_image`, but WRITES the bytes to disk under `MCP_IMAGE_SAVE_DIR` (default `/data/images/`) and returns the path + size. Bind-mount a host directory onto that path to bridge to a downstream pipeline (ImageMagick, filesystem-mcp consumer, etc.) without a vision render. |
+| `plex_download_logs` | Fetch the Plex Media Server's own diagnostic log bundle (a ZIP) and write it to disk under `MCP_LOG_SAVE_DIR` (default `/data/logs/`) |
 
 ## Configuration
 
@@ -58,6 +61,23 @@ Two environment variables, both required:
 To find your Plex token, see Plex's
 [Finding an authentication token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)
 guide.
+
+### Optional environment variables
+
+All have working defaults; set only to override.
+
+| Var | Default | Notes |
+| --- | --- | --- |
+| `MCP_FETCH_TIMEOUT_MS` | `30000` | Timeout for every outbound Plex request except log downloads |
+| `MCP_IMAGE_MAX_BYTES` | `4194304` (4 MiB) | Size cap for `plex_get_image`/`plex_save_image` |
+| `MCP_LOG_MAX_BYTES` | `52428800` (50 MiB) | Size cap for `plex_download_logs` |
+| `MCP_LOG_FETCH_TIMEOUT_MS` | `120000` (2 min) | Timeout for `plex_download_logs` — separate from `MCP_FETCH_TIMEOUT_MS` since a log ZIP has a different size/latency profile |
+| `MCP_SESSION_IDLE_TIMEOUT_MS` | `3600000` (1 hr) | Evicts an HTTP-mode MCP session after this much inactivity |
+
+`LOG_LEVEL`, `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`, and
+`HOST_IMAGE_DIR`/`HOST_LOG_DIR` are covered in their own sections below
+(Logging, HTTP transport hardening, Portainer deploy) since each needs
+more than a one-line note.
 
 > **Plex on the same host as the container?** Use
 > `PLEX_URL=http://host.docker.internal:32400`. The compose file maps
