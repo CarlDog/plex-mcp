@@ -179,8 +179,9 @@ docker compose up
 2. Repository URL: `https://github.com/CarlDog/plex-mcp`
 3. Compose path: `docker-compose.yml`
 4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`,
-   `MCP_ALLOWED_HOSTS` (**required** — see below), and `HOST_IMAGE_DIR`
-   (**required** for git stacks — see below); optionally `HOST_PORT`.
+   `MCP_ALLOWED_HOSTS` (**required** — see below), `HOST_IMAGE_DIR`, and
+   `HOST_LOG_DIR` (**required** for git stacks — see below); optionally
+   `HOST_PORT`.
 5. Deploy. Healthcheck reaches green within ~10 seconds.
 
 ### `MCP_ALLOWED_HOSTS` is required in HTTP mode
@@ -226,6 +227,15 @@ filesystem-mcp's `/media/_mcp-scratch` mount — e.g.
 `/volume1/Media/_mcp-scratch` on a Synology NAS — which keeps the
 `plex_search → plex_save_image → filesystem-mcp` pipeline on one
 shared directory.
+
+The same trap applies to `HOST_LOG_DIR` (the `plex_download_logs`
+output volume) — it defaults to the relative `./data/logs`, which
+fails identically on a git-stack deploy. Set it to an absolute host
+path too, e.g. `/volume1/docker/plex-mcp/logs` on a Synology NAS
+(matching this fleet's per-container appdata convention — see
+`docker-deployments.md` rule #10), and make sure the directory exists
+on the host **before** the first deploy: Docker does not auto-create a
+missing bind-mount source, it just refuses to start the container.
 
 ## Use with Claude Desktop
 
