@@ -10,8 +10,13 @@ standards-audit issue #8 closed earlier this session — MCP-S01
 (`src/config.ts`), MCP-F01/F02 (fetch timeout + bounded retry),
 MCP-P04/P05 (viewer-IP redaction + log verbosity), MCP-P06
 (destructive-tool name confirmation), MCP-F03 (HTTP transport
-hardening, verified live), UNI-16 closed as a non-issue. See "Done"
-below.)
+hardening, verified live), UNI-16 closed as a non-issue. Phase-end
+audit run after that batch — doc drift fixed, 3 duplication findings
+deduped, a real non-positive-timeout bug fixed, and the long-standing
+`unmatch`/`applyMatch` test flake finally root-caused and fixed
+(the guard was broken, which had left a real library item unmatched
+in production — repaired live). Suite is 117/117 green for the first
+time since the flake was first noted 2026-07-29. See "Done" below.)
 
 ## Phase
 
@@ -684,6 +689,53 @@ downloader-mcp.
   `HOST_IMAGE_DIR` — a diagnostic ZIP isn't a media artifact. Verified
   live via a dedicated test asserting the `PK` ZIP magic-byte prefix on
   a real downloaded bundle, plus a traversal-rejection test.
+
+- **Phase-end audit run + fixes shipped (2026-08-03).** Fleet-kit
+  `phase-end-audit` skill, surveyed via 4 parallel agents (docs
+  currency, refactor/streamline scan, deprived-environment walkthrough,
+  and a from-scratch root-cause of the persistent `unmatch`/`applyMatch`
+  test failure noted throughout this session). Findings and fixes:
+  - **Doc drift** (README tool table + env vars, CLAUDE.md's
+    `src/tools/` file list, a stale STATUS.md "Next" item, a stale
+    `src/config.ts` comment) — fixed, doc-only commit.
+  - **Refactor/streamline**: deduped the 4 byte-identical
+    `resolveXxx` env-parsers into `resolveIntEnv`; deduped
+    `saveImage`/`downloadLogs`'s traversal-guard + disk-write logic
+    into `assertSafeBasename`/`ensureSaveDir`/`writeBytesToPath` (also
+    reorders both to validate the save dir before the network fetch);
+    deduped `plex_get_image`/`plex_save_image`'s argument validation
+    into `assertImageEntryPoint`. Added unit tests for
+    `resolveLogMaxBytes`/`resolveLogFetchTimeoutMs` (previously
+    exported but untested). Queued, not fixed: `request`/
+    `requestNoContent`'s shared fetch/error contract and
+    `fetchBinary`/`downloadLogs`'s byte-cap-check duplication — both
+    flagged as bigger, cross-cutting changes that deserve their own
+    planned pass rather than a silent audit-time rewrite.
+  - **Real bug found and fixed**: `resolveIntEnv`'s old per-copy
+    bodies only guarded `NaN` — `MCP_LOG_FETCH_TIMEOUT_MS="-1"` reached
+    `AbortSignal.timeout(-1)` and threw a raw Node `RangeError`
+    mislabeled as a generic "network error"; `"0"` timed out every
+    request immediately with no indication the env var was the cause.
+    Non-positive values now fall back to the default.
+  - **The `unmatch`/`applyMatch` flake, finally root-caused**: not
+    timing, not a `src/plex.ts` bug — the test's own skip-guard read
+    a field that doesn't exist on an item (`librarySectionAgent`) and
+    checked the wrong unmatched-GUID prefix (`local://` instead of the
+    real `tv.plex.agents.none://<ratingKey>`), so the guard never
+    fired. A **prior run of the broken test had actually left a real
+    library item unmatched in production** — the "Arcane" show
+    (ratingKey 40892) — and `afterAll`'s restore attempt couldn't
+    recover it (same wrong-prefix bug). Fixed the guard in both the
+    `it` block and `afterAll`, then separately repaired the actual
+    production item live: `plex_get_matches` → one exact TMDB
+    candidate → `plex_apply_match` → `plex_refresh_metadata`. Verified
+    real metadata (genres, ratings, IMDB/TMDB/TVDB GUIDs) came back
+    with locked fields (`summary`, `thumb`, `genre`, `collection`,
+    `label`) intact, then re-ran the fixed test in isolation and
+    confirmed it now actually exercises the round trip (314ms, not an
+    instant skip) and passes. Full suite: 117/117 passing — the first
+    fully-green run of this suite since the flake was first noted
+    2026-07-29.
 
 ## Next
 

@@ -57,6 +57,16 @@ the work rather than after the fact.
 
 ### Changed
 
+- Phase-end audit cleanup: extracted `resolveIntEnv` to deduplicate 4
+  byte-identical env-parsing functions in `src/plex.ts`; extracted
+  `assertSafeBasename`/`ensureSaveDir`/`writeBytesToPath` to deduplicate
+  `saveImage`/`downloadLogs`'s traversal-guard and disk-write logic
+  (also reorders both to validate the save directory before the network
+  fetch, so a bad `MCP_*_SAVE_DIR` fails fast); extracted
+  `assertImageEntryPoint` to deduplicate `plex_get_image`/
+  `plex_save_image`'s argument validation. Doc drift fixed: README's
+  tool table and env-var docs, CLAUDE.md's file listing, a stale
+  STATUS.md "Next" item.
 - **Breaking (tool input shape):** `plex_delete_playlist`, `plex_split_item`,
   and `plex_merge_items` now require `confirm_title` /
   `confirm_into_title` matching the target's actual current title
@@ -72,6 +82,21 @@ the work rather than after the fact.
 
 ### Fixed
 
+- `MCP_FETCH_TIMEOUT_MS`/`MCP_LOG_FETCH_TIMEOUT_MS` (and the two byte-cap
+  vars) previously only guarded against a non-numeric value — `"-1"`
+  reached `AbortSignal.timeout(-1)` and threw a raw Node `RangeError`
+  mislabeled as a generic "network error", and `"0"` timed out every
+  request immediately with no indication the env var was the cause.
+  Non-positive values now fall back to the default, same as an invalid one.
+- Fixed a persistently-failing (not flaky) test in `tests/plex.test.ts`
+  whose skip-guard checked a nonexistent field (`librarySectionAgent`,
+  which lives on the library section, never on an item) and the wrong
+  unmatched-GUID prefix (`local://`, which never occurs — the real one
+  is `tv.plex.agents.none://<ratingKey>`). Both bugs meant the guard
+  never fired, so the test ran `unmatch()` against a fixture already
+  sitting unmatched in production from a prior broken run; separately
+  re-matched that show for real via `plex_get_matches`/`plex_apply_match`/
+  `plex_refresh_metadata`.
 - `docker-compose.yml` (MCP-E02): the `volumes:` host path was a hardcoded
   absolute NAS path with zero `${}` indirection, and `LOG_LEVEL` (already
   read by `src/log.ts`) was never set at all. Now `${HOST_IMAGE_DIR:-./data/images}`
