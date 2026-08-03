@@ -14,6 +14,7 @@ import { describe, expect, test, afterEach, vi } from "vitest";
 import {
   PlexClient,
   resolveFetchTimeoutMs,
+  resolveLogFetchTimeoutMs,
   parseRetryAfterMs,
 } from "../src/plex.js";
 
@@ -30,8 +31,41 @@ describe("resolveFetchTimeoutMs", () => {
     expect(resolveFetchTimeoutMs("not-a-number")).toBe(30_000);
   });
 
+  test("falls back to the default for zero or negative", () => {
+    // Regression: AbortSignal.timeout(0) fires immediately and
+    // AbortSignal.timeout(-1) throws a raw RangeError — both used to
+    // reach fetchWithTimeoutAndRetry unvalidated (phase-end audit
+    // finding, 2026-08-03), surfacing as a confusing "network error"
+    // that never named the misconfigured env var.
+    expect(resolveFetchTimeoutMs("0")).toBe(30_000);
+    expect(resolveFetchTimeoutMs("-1")).toBe(30_000);
+  });
+
   test("uses an explicit numeric override", () => {
     expect(resolveFetchTimeoutMs("5000")).toBe(5000);
+  });
+});
+
+describe("resolveLogFetchTimeoutMs", () => {
+  test("falls back to the default when unset", () => {
+    expect(resolveLogFetchTimeoutMs(undefined)).toBe(120_000);
+  });
+
+  test("falls back to the default for an empty string", () => {
+    expect(resolveLogFetchTimeoutMs("")).toBe(120_000);
+  });
+
+  test("falls back to the default for a non-numeric value", () => {
+    expect(resolveLogFetchTimeoutMs("not-a-number")).toBe(120_000);
+  });
+
+  test("falls back to the default for zero or negative", () => {
+    expect(resolveLogFetchTimeoutMs("0")).toBe(120_000);
+    expect(resolveLogFetchTimeoutMs("-1")).toBe(120_000);
+  });
+
+  test("uses an explicit numeric override", () => {
+    expect(resolveLogFetchTimeoutMs("5000")).toBe(5000);
   });
 });
 

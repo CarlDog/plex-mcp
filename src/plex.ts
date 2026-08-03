@@ -16,18 +16,27 @@ interface PlexResponse<T> {
 // dict (plexapi/utils.py) — 'collection': 18.
 const PLEX_TYPE_COLLECTION = 18;
 
+/**
+ * Parse a positive-integer env var, falling back to `defaultValue` for
+ * unset, empty-string, non-numeric, or non-positive values. Some MCP
+ * hosts inject "" for a blank config field rather than leaving it
+ * unset — plain `?? default` lets that through, and parseInt("") is
+ * NaN, so every downstream comparison would silently no-op. A
+ * non-positive value is just as invalid as NaN for a byte cap or a
+ * timeout: `AbortSignal.timeout(0)` fires immediately and
+ * `AbortSignal.timeout(-1)` throws a raw RangeError rather than
+ * producing a usable timeout, so it's treated the same as unset
+ * rather than propagating a confusing runtime exception.
+ */
+function resolveIntEnv(raw: string | undefined, defaultValue: number): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isNaN(parsed) || parsed <= 0 ? defaultValue : parsed;
+}
+
 const DEFAULT_IMAGE_MAX_BYTES = 4194304;
 
-/**
- * Parse MCP_IMAGE_MAX_BYTES, falling back to the default for unset,
- * empty-string, or non-numeric values. Some MCP hosts inject "" for a
- * blank config field rather than leaving it unset — plain `?? default`
- * lets that through, and parseInt("") is NaN, so every downstream size
- * comparison silently no-ops and the cap stops applying.
- */
 export function resolveImageMaxBytes(raw: string | undefined): number {
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isNaN(parsed) ? DEFAULT_IMAGE_MAX_BYTES : parsed;
+  return resolveIntEnv(raw, DEFAULT_IMAGE_MAX_BYTES);
 }
 
 const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
@@ -35,13 +44,8 @@ const MAX_RETRY_AFTER_MS = 30_000;
 const MAX_RETRIES_ON_429 = 2;
 const DEFAULT_RETRY_BACKOFF_MS = 1_000;
 
-/**
- * Parse MCP_FETCH_TIMEOUT_MS the same way as resolveImageMaxBytes —
- * unset/empty/non-numeric all fall back to the default (MCP-F01).
- */
 export function resolveFetchTimeoutMs(raw: string | undefined): number {
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isNaN(parsed) ? DEFAULT_FETCH_TIMEOUT_MS : parsed;
+  return resolveIntEnv(raw, DEFAULT_FETCH_TIMEOUT_MS);
 }
 
 /**
@@ -72,13 +76,77 @@ const DEFAULT_LOG_MAX_BYTES = 52_428_800; // 50 MiB
 const DEFAULT_LOG_FETCH_TIMEOUT_MS = 120_000; // 2 min
 
 export function resolveLogMaxBytes(raw: string | undefined): number {
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isNaN(parsed) ? DEFAULT_LOG_MAX_BYTES : parsed;
+  return resolveIntEnv(raw, DEFAULT_LOG_MAX_BYTES);
 }
 
 export function resolveLogFetchTimeoutMs(raw: string | undefined): number {
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isNaN(parsed) ? DEFAULT_LOG_FETCH_TIMEOUT_MS : parsed;
+  return resolveIntEnv(raw, DEFAULT_LOG_FETCH_TIMEOUT_MS);
+}
+
+/**
+ * Validate that `filename` is a safe basename (no path separators, no
+ * traversal sequences, no leading dot) before it's used to construct a
+ * disk path. Defense against an LLM tricked into passing
+ * "../../etc/passwd" or similar. Shared by saveImage/downloadLogs so
+ * this path-traversal guard can't drift between the two disk-writing
+ * call sites.
+ */
+function assertSafeBasename(filename: string, context: string): void {
+  if (
+    filename.includes("/") ||
+    filename.includes("\\") ||
+    filename.includes("..") ||
+    filename.startsWith(".")
+  ) {
+    throw new Error(
+      `${context}: filename must be a basename (no '/', '\\', '..', or leading '.'); got ${JSON.stringify(filename)}`,
+    );
+  }
+}
+
+/**
+ * Ensure `baseDir` exists (creating it if necessary), throwing a clear
+ * operator-actionable error naming `envVarName` on failure. Called
+ * before the network fetch in saveImage/downloadLogs so a bad
+ * save-dir config fails fast instead of only after a potentially
+ * large transfer completes.
+ */
+function ensureSaveDir(
+  baseDir: string,
+  context: string,
+  envVarName: string,
+): void {
+  try {
+    mkdirSync(baseDir, { recursive: true });
+  } catch (err) {
+    throw new Error(
+      `${context}: could not create save dir ${baseDir}: ${(err as Error).message}. Set ${envVarName} to a writable path.`,
+      { cause: err },
+    );
+  }
+}
+
+/**
+ * Write `bytes` to `<baseDir>/<filename>`, wrapping fs errors with an
+ * operator-actionable message. Caller must already have validated the
+ * filename and ensured baseDir exists (assertSafeBasename/ensureSaveDir).
+ */
+function writeBytesToPath(
+  baseDir: string,
+  filename: string,
+  bytes: Uint8Array,
+  context: string,
+): string {
+  const path = join(baseDir, filename);
+  try {
+    writeFileSync(path, bytes);
+  } catch (err) {
+    throw new Error(
+      `${context}: could not write ${path}: ${(err as Error).message}`,
+      { cause: err },
+    );
+  }
+  return path;
 }
 
 export class PlexClient {
@@ -824,17 +892,9 @@ export class PlexClient {
     if (!args.filename) {
       throw new Error("saveImage: filename is required");
     }
-    if (
-      args.filename.includes("/") ||
-      args.filename.includes("\\") ||
-      args.filename.includes("..") ||
-      args.filename.startsWith(".")
-    ) {
-      throw new Error(
-        `saveImage: filename must be a basename (no '/', '\\', '..', or leading '.'); got ${JSON.stringify(args.filename)}`,
-      );
-    }
+    assertSafeBasename(args.filename, "saveImage");
     const baseDir = process.env.MCP_IMAGE_SAVE_DIR ?? "/data/images";
+    ensureSaveDir(baseDir, "saveImage", "MCP_IMAGE_SAVE_DIR");
     const { bytes, mimeType } = await this.getImageBytes({
       ratingKey: args.ratingKey,
       imageUrl: args.imageUrl,
@@ -842,23 +902,7 @@ export class PlexClient {
       maxWidth: args.maxWidth,
       maxHeight: args.maxHeight,
     });
-    try {
-      mkdirSync(baseDir, { recursive: true });
-    } catch (err) {
-      throw new Error(
-        `saveImage: could not create save dir ${baseDir}: ${(err as Error).message}. Set MCP_IMAGE_SAVE_DIR to a writable path.`,
-        { cause: err },
-      );
-    }
-    const path = join(baseDir, args.filename);
-    try {
-      writeFileSync(path, bytes);
-    } catch (err) {
-      throw new Error(
-        `saveImage: could not write ${path}: ${(err as Error).message}`,
-        { cause: err },
-      );
-    }
+    const path = writeBytesToPath(baseDir, args.filename, bytes, "saveImage");
     log.info("plex", "image saved", {
       path,
       bytes: bytes.byteLength,
@@ -889,16 +933,9 @@ export class PlexClient {
     args: { filename?: string } = {},
   ): Promise<{ path: string; bytes_written: number; mime_type: string }> {
     const filename = args.filename ?? `plex-logs-${Date.now()}.zip`;
-    if (
-      filename.includes("/") ||
-      filename.includes("\\") ||
-      filename.includes("..") ||
-      filename.startsWith(".")
-    ) {
-      throw new Error(
-        `downloadLogs: filename must be a basename (no '/', '\\', '..', or leading '.'); got ${JSON.stringify(filename)}`,
-      );
-    }
+    assertSafeBasename(filename, "downloadLogs");
+    const baseDir = process.env.MCP_LOG_SAVE_DIR ?? "/data/logs";
+    ensureSaveDir(baseDir, "downloadLogs", "MCP_LOG_SAVE_DIR");
 
     const endpoint = "/diagnostics/logs";
     const url = new URL(endpoint, this.config.url);
@@ -949,24 +986,12 @@ export class PlexClient {
     const rawType = res.headers.get("content-type") ?? "application/zip";
     const mimeType = rawType.split(";")[0]!.trim();
 
-    const baseDir = process.env.MCP_LOG_SAVE_DIR ?? "/data/logs";
-    try {
-      mkdirSync(baseDir, { recursive: true });
-    } catch (err) {
-      throw new Error(
-        `downloadLogs: could not create save dir ${baseDir}: ${(err as Error).message}. Set MCP_LOG_SAVE_DIR to a writable path.`,
-        { cause: err },
-      );
-    }
-    const savePath = join(baseDir, filename);
-    try {
-      writeFileSync(savePath, buffer);
-    } catch (err) {
-      throw new Error(
-        `downloadLogs: could not write ${savePath}: ${(err as Error).message}`,
-        { cause: err },
-      );
-    }
+    const savePath = writeBytesToPath(
+      baseDir,
+      filename,
+      buffer,
+      "downloadLogs",
+    );
     log.info("plex", "logs saved", {
       path: savePath,
       bytes: buffer.byteLength,

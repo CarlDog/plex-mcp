@@ -10,7 +10,7 @@ import {
   SAFE_WRITE_ANNOTATIONS,
   asImage,
   asText,
-  assertRelativePlexPath,
+  assertImageEntryPoint,
   withLogging,
 } from "./helpers.js";
 
@@ -60,14 +60,7 @@ export function registerImageTools(server: McpServer, plex: PlexClient): void {
     withLogging(
       "plex_get_image",
       async ({ rating_key, image_url, image_type, max_width, max_height }) => {
-        if (!rating_key && !image_url) {
-          throw new Error(
-            "plex_get_image: either rating_key or image_url must be provided",
-          );
-        }
-        if (image_url) {
-          assertRelativePlexPath("plex_get_image", image_url);
-        }
+        assertImageEntryPoint("plex_get_image", rating_key, image_url);
         const { bytes, mimeType } = await plex.getImageBytes({
           ratingKey: rating_key,
           imageUrl: image_url,
@@ -138,14 +131,7 @@ export function registerImageTools(server: McpServer, plex: PlexClient): void {
         max_width,
         max_height,
       }) => {
-        if (!rating_key && !image_url) {
-          throw new Error(
-            "plex_save_image: either rating_key or image_url must be provided",
-          );
-        }
-        if (image_url) {
-          assertRelativePlexPath("plex_save_image", image_url);
-        }
+        assertImageEntryPoint("plex_save_image", rating_key, image_url);
         const result = await plex.saveImage({
           filename,
           ratingKey: rating_key,

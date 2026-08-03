@@ -43,6 +43,27 @@ export function assertRelativePlexPath(
 }
 
 /**
+ * Validate the entry-point args shared by plex_get_image/plex_save_image:
+ * exactly one of rating_key/image_url must anchor the fetch, and a
+ * provided image_url must be a safe relative Plex path. Kept in one
+ * place so the two callers' argument contract can't drift.
+ */
+export function assertImageEntryPoint(
+  toolName: string,
+  ratingKey: string | undefined,
+  imageUrl: string | undefined,
+): void {
+  if (!ratingKey && !imageUrl) {
+    throw new Error(
+      `${toolName}: either rating_key or image_url must be provided`,
+    );
+  }
+  if (imageUrl) {
+    assertRelativePlexPath(toolName, imageUrl);
+  }
+}
+
+/**
  * Refuse an irreversible operation unless the caller's confirm_title
  * matches the resolved target's actual current title (MCP-P06). A
  * `confirm: true` flag alone is advisory — an autonomous agent can
