@@ -706,11 +706,15 @@ downloader-mcp.
     deduped `plex_get_image`/`plex_save_image`'s argument validation
     into `assertImageEntryPoint`. Added unit tests for
     `resolveLogMaxBytes`/`resolveLogFetchTimeoutMs` (previously
-    exported but untested). Queued, not fixed: `request`/
-    `requestNoContent`'s shared fetch/error contract and
-    `fetchBinary`/`downloadLogs`'s byte-cap-check duplication — both
-    flagged as bigger, cross-cutting changes that deserve their own
-    planned pass rather than a silent audit-time rewrite.
+    exported but untested). Queued as bigger/cross-cutting rather than
+    fixed inline: `request`/`requestNoContent`'s shared fetch/error
+    contract (**done as its own follow-up pass, same day** — extracted
+    to `sendRequest()`, the highest-leverage dedup since every tool in
+    the codebase routes through one of these two methods; verified
+    both the JSON-parsing and no-content paths live against the
+    deployed container, not just the local test suite) and
+    `fetchBinary`/`downloadLogs`'s byte-cap-check duplication (still
+    queued — different cap/timeout sources to reconcile).
   - **Real bug found and fixed**: `resolveIntEnv`'s old per-copy
     bodies only guarded `NaN` — `MCP_LOG_FETCH_TIMEOUT_MS="-1"` reached
     `AbortSignal.timeout(-1)` and threw a raw Node `RangeError`

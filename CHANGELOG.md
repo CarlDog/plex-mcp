@@ -64,7 +64,10 @@ the work rather than after the fact.
   (also reorders both to validate the save directory before the network
   fetch, so a bad `MCP_*_SAVE_DIR` fails fast); extracted
   `assertImageEntryPoint` to deduplicate `plex_get_image`/
-  `plex_save_image`'s argument validation. Doc drift fixed: README's
+  `plex_save_image`'s argument validation; extracted `sendRequest` to
+  deduplicate `request<T>`/`requestNoContent`'s shared fetch-and-error
+  contract — the highest-leverage dedup of the batch, since every tool
+  routes through one of these two methods. Doc drift fixed: README's
   tool table and env-var docs, CLAUDE.md's file listing, a stale
   STATUS.md "Next" item.
 - **Breaking (tool input shape):** `plex_delete_playlist`, `plex_split_item`,
