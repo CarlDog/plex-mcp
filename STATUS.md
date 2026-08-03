@@ -4,12 +4,14 @@
 `plex_list_collections`, `plex_hub_search`, `plex_browse`'s `collection`
 filter, all verified against the live server; subtitle discovery shipped
 via `plex_get_item` minimal mode, content fetch explicitly declined
-(no endpoint evidence in python-plexapi). Fleet standards-audit issue #8
-closed earlier this session — MCP-S01 (`src/config.ts`), MCP-F01/F02
-(fetch timeout + bounded retry), MCP-P04/P05 (viewer-IP redaction + log
-verbosity), MCP-P06 (destructive-tool name
-confirmation), MCP-F03 (HTTP transport hardening, verified live), UNI-16
-closed as a non-issue. See "Done" below.)
+(no endpoint evidence in python-plexapi); `plex_download_logs` shipped —
+`GET /diagnostics/logs` ZIP bundle download, verified live. Fleet
+standards-audit issue #8 closed earlier this session — MCP-S01
+(`src/config.ts`), MCP-F01/F02 (fetch timeout + bounded retry),
+MCP-P04/P05 (viewer-IP redaction + log verbosity), MCP-P06
+(destructive-tool name confirmation), MCP-F03 (HTTP transport
+hardening, verified live), UNI-16 closed as a non-issue. See "Done"
+below.)
 
 ## Phase
 
@@ -661,6 +663,27 @@ downloader-mcp.
   subtitle-named methods manage *which* file is attached (upload/search/
   download-and-attach/remove), none reads content back to the caller.
   Full reasoning in `docs/PLEX-API.md`.
+
+- **`plex_download_logs` shipped (2026-08-03) — closes the log-retrieval
+  idea logged earlier this session.** `GET /diagnostics/logs` confirmed
+  live against the real server (not just python-plexapi source): returns
+  a `application/zip` bundle, 1,662,508 bytes (~1.59 MiB) for this
+  server's current log volume. `PlexClient.downloadLogs()` mirrors
+  `saveImage()`'s disk-write pattern — basename-only filename validation
+  (traversal defense), size cap (`MCP_LOG_MAX_BYTES`, default 50 MiB —
+  headroom over the measured real size), saves under `MCP_LOG_SAVE_DIR`
+  (default `/data/logs`). Separate `MCP_LOG_FETCH_TIMEOUT_MS` (default
+  2 min, vs `MCP_FETCH_TIMEOUT_MS`'s 30s default for the rest of the
+  client) — a multi-MB log bundle is a different latency profile than a
+  JSON API call, so it gets its own timeout override on the shared
+  `fetchWithTimeoutAndRetry()` chokepoint rather than inheriting the
+  short default. New tool lives in `src/tools/diagnostics.ts` (new
+  file — first tool outside the existing discovery/sessions/playback/
+  playlists/hubs domains). `docker-compose.yml` gets its own
+  `HOST_LOG_DIR` bind mount, deliberately separate from
+  `HOST_IMAGE_DIR` — a diagnostic ZIP isn't a media artifact. Verified
+  live via a dedicated test asserting the `PK` ZIP magic-byte prefix on
+  a real downloaded bundle, plus a traversal-rejection test.
 
 ## Next
 

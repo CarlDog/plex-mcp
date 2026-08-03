@@ -271,6 +271,48 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     ).rejects.toThrow(/basename/);
   });
 
+  // Log-bundle generation + transfer is slower than a metadata call;
+  // the explicit 30s timeout below gives this one more room than
+  // vitest's 5s default before it's considered hung.
+  it("downloadLogs writes a ZIP bundle to MCP_LOG_SAVE_DIR", async () => {
+    const { mkdtempSync, readFileSync, rmSync, existsSync } =
+      await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join: pathJoin } = await import("node:path");
+    const dir = mkdtempSync(pathJoin(tmpdir(), "plex-mcp-logs-"));
+    const prev = process.env.MCP_LOG_SAVE_DIR;
+    process.env.MCP_LOG_SAVE_DIR = dir;
+    try {
+      const result = await client.downloadLogs({
+        filename: "fixture-logs.zip",
+      });
+      expect(result.path).toBe(pathJoin(dir, "fixture-logs.zip"));
+      expect(result.bytes_written).toBeGreaterThan(0);
+      expect(existsSync(result.path)).toBe(true);
+      const bytes = readFileSync(result.path);
+      // ZIP local-file-header magic: "PK\x03\x04" (or PK\x05\x06 for
+      // an empty archive, PK\x07\x08 for a spanned one) — confirms
+      // the response really is a ZIP, per the research's structural
+      // evidence (python-plexapi's download() only knows how to
+      // unpack .zip for this call).
+      const head = bytes.subarray(0, 2).toString("ascii");
+      expect(head).toBe("PK");
+    } finally {
+      if (prev === undefined) delete process.env.MCP_LOG_SAVE_DIR;
+      else process.env.MCP_LOG_SAVE_DIR = prev;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("downloadLogs rejects traversal filenames", async () => {
+    await expect(
+      client.downloadLogs({ filename: "../escape.zip" }),
+    ).rejects.toThrow(/basename/);
+    await expect(
+      client.downloadLogs({ filename: "sub/foo.zip" }),
+    ).rejects.toThrow(/basename/);
+  });
+
   it("getChildren returns at least one child for a show", async () => {
     const children = (await client.getChildren(
       fixtures.showRatingKey,

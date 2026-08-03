@@ -64,6 +64,23 @@ export function parseRetryAfterMs(header: string | null): number {
   return DEFAULT_RETRY_BACKOFF_MS;
 }
 
+// A server log bundle can be far larger than an image (research: a
+// multi-file ZIP of PMS's own log history) — separate, larger default
+// cap and a separate, longer fetch timeout than the metadata-call
+// defaults above.
+const DEFAULT_LOG_MAX_BYTES = 52_428_800; // 50 MiB
+const DEFAULT_LOG_FETCH_TIMEOUT_MS = 120_000; // 2 min
+
+export function resolveLogMaxBytes(raw: string | undefined): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isNaN(parsed) ? DEFAULT_LOG_MAX_BYTES : parsed;
+}
+
+export function resolveLogFetchTimeoutMs(raw: string | undefined): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isNaN(parsed) ? DEFAULT_LOG_FETCH_TIMEOUT_MS : parsed;
+}
+
 export class PlexClient {
   private machineIdentifier: string | undefined;
 
@@ -158,17 +175,23 @@ export class PlexClient {
    * honoring Retry-After (MCP-F02). A hung/half-open Plex server would
    * otherwise block a tool call indefinitely — every call site routes
    * through this one chokepoint rather than calling fetch() directly.
+   *
+   * `timeoutMsOverride` lets a call site with a different latency
+   * profile (e.g. downloadLogs' multi-file ZIP generation+transfer) use
+   * its own timeout instead of the metadata-call default.
    */
   private async fetchWithTimeoutAndRetry(
     url: URL,
     init: RequestInit,
+    timeoutMsOverride?: number,
   ): Promise<Response> {
+    const timeoutMs =
+      timeoutMsOverride ??
+      resolveFetchTimeoutMs(process.env.MCP_FETCH_TIMEOUT_MS);
     for (let attempt = 0; ; attempt++) {
       const res = await fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(
-          resolveFetchTimeoutMs(process.env.MCP_FETCH_TIMEOUT_MS),
-        ),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (res.status !== 429 || attempt >= MAX_RETRIES_ON_429) {
         return res;
@@ -844,6 +867,114 @@ export class PlexClient {
     return {
       path,
       bytes_written: bytes.byteLength,
+      mime_type: mimeType,
+    };
+  }
+
+  /**
+   * Download Plex Media Server's own diagnostic log bundle and save it
+   * to disk (mirrors saveImage's disk-write pattern; returns a manifest,
+   * not the bytes inline — a log ZIP would blow an LLM context budget).
+   *
+   * GET /diagnostics/logs, confirmed against python-plexapi's
+   * PlexServer.downloadLogs() (same endpoint, same X-Plex-Token header
+   * auth as every other call here) and independently corroborated by
+   * Plex's own support docs. Response is expected to be a ZIP archive —
+   * left as-is (not auto-unpacked) since neither source confirmed the
+   * exact Content-Type PMS sends, and unzip-on-write adds a failure mode
+   * for no clear benefit (the caller can unzip the saved file if they
+   * want its contents; filesystem-mcp already has that capability).
+   */
+  async downloadLogs(
+    args: { filename?: string } = {},
+  ): Promise<{ path: string; bytes_written: number; mime_type: string }> {
+    const filename = args.filename ?? `plex-logs-${Date.now()}.zip`;
+    if (
+      filename.includes("/") ||
+      filename.includes("\\") ||
+      filename.includes("..") ||
+      filename.startsWith(".")
+    ) {
+      throw new Error(
+        `downloadLogs: filename must be a basename (no '/', '\\', '..', or leading '.'); got ${JSON.stringify(filename)}`,
+      );
+    }
+
+    const endpoint = "/diagnostics/logs";
+    const url = new URL(endpoint, this.config.url);
+    const start = Date.now();
+    log.debug("plex", "fetch logs", {});
+    let res: Response;
+    try {
+      res = await this.fetchWithTimeoutAndRetry(
+        url,
+        { headers: { "X-Plex-Token": this.config.token } },
+        resolveLogFetchTimeoutMs(process.env.MCP_LOG_FETCH_TIMEOUT_MS),
+      );
+    } catch (err) {
+      log.error("plex", "network error", {
+        path: endpoint,
+        ms: Date.now() - start,
+        msg: (err as Error).message,
+      });
+      throw err;
+    }
+    const ms = Date.now() - start;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      log.warn("plex", "http error", {
+        path: endpoint,
+        status: res.status,
+        ms,
+      });
+      throw new Error(
+        `Plex ${res.status} ${res.statusText} for GET ${endpoint}: ${body.slice(0, 200)}`,
+      );
+    }
+
+    const cap = resolveLogMaxBytes(process.env.MCP_LOG_MAX_BYTES);
+    const contentLength = res.headers.get("content-length");
+    if (contentLength && Number.parseInt(contentLength, 10) > cap) {
+      throw new Error(
+        `Plex logs bundle is ${contentLength} bytes, exceeds MCP_LOG_MAX_BYTES=${cap}.`,
+      );
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.byteLength > cap) {
+      throw new Error(
+        `Plex logs bundle is ${buffer.byteLength} bytes (no content-length header), exceeds MCP_LOG_MAX_BYTES=${cap}.`,
+      );
+    }
+
+    const rawType = res.headers.get("content-type") ?? "application/zip";
+    const mimeType = rawType.split(";")[0]!.trim();
+
+    const baseDir = process.env.MCP_LOG_SAVE_DIR ?? "/data/logs";
+    try {
+      mkdirSync(baseDir, { recursive: true });
+    } catch (err) {
+      throw new Error(
+        `downloadLogs: could not create save dir ${baseDir}: ${(err as Error).message}. Set MCP_LOG_SAVE_DIR to a writable path.`,
+        { cause: err },
+      );
+    }
+    const savePath = join(baseDir, filename);
+    try {
+      writeFileSync(savePath, buffer);
+    } catch (err) {
+      throw new Error(
+        `downloadLogs: could not write ${savePath}: ${(err as Error).message}`,
+        { cause: err },
+      );
+    }
+    log.info("plex", "logs saved", {
+      path: savePath,
+      bytes: buffer.byteLength,
+      mime: mimeType,
+    });
+    return {
+      path: savePath,
+      bytes_written: buffer.byteLength,
       mime_type: mimeType,
     };
   }

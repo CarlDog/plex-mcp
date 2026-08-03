@@ -42,6 +42,12 @@ services:
       # Plex (MCP-F01). A hung or half-open Plex server would otherwise
       # block a tool call indefinitely. Default 30s.
       MCP_FETCH_TIMEOUT_MS: "${MCP_FETCH_TIMEOUT_MS:-30000}"
+      # Optional: size cap and fetch timeout for plex_download_logs. A
+      # log ZIP bundle has a different size/latency profile than an
+      # image — separate defaults from MCP_IMAGE_MAX_BYTES /
+      # MCP_FETCH_TIMEOUT_MS above (50 MiB, 2 min vs 4 MiB, 30s).
+      MCP_LOG_MAX_BYTES: "${MCP_LOG_MAX_BYTES:-52428800}"
+      MCP_LOG_FETCH_TIMEOUT_MS: "${MCP_LOG_FETCH_TIMEOUT_MS:-120000}"
       # Optional HTTPS — pick ONE of the two modes below.
       #
       # (a) Self-managed cert (recommended for LAN-only deployment):
@@ -67,6 +73,13 @@ services:
       # Override the in-container path with MCP_IMAGE_SAVE_DIR if
       # you want it elsewhere.
       - ${HOST_IMAGE_DIR:-./data/images}:/data/images
+      # plex_download_logs output directory. Separate from
+      # HOST_IMAGE_DIR above — a diagnostic log ZIP isn't a media
+      # artifact, and keeping the two apart avoids mixing them in
+      # one host directory or one filesystem-mcp-exposed path.
+      # Default below is relative, for local testing; override with
+      # MCP_LOG_SAVE_DIR if you want the in-container path elsewhere.
+      - ${HOST_LOG_DIR:-./data/logs}:/data/logs
       # Optional HTTPS cert volume (commented). Self-managed persists
       # across restarts; BYO is read-only.
       # - ./certs:/data/certs

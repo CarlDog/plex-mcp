@@ -257,12 +257,12 @@ below). Shapes without ✓ are speculative.
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |
 | Currently transcoding sessions          | `GET /transcode/sessions`                                                                | Low                      |
 | Subtitle content (dialogue text)        | Not implemented — no endpoint evidence, see below                                        | Declined — no evidence   |
-| Server log retrieval                    | See below                                                                                 | Unresearched              |
-
 Built since the table above was last swept: collections support
 (`plex_list_collections`, `plex_hub_search`, `plex_browse`'s `collection`
-filter — 2026-08-03) and subtitle *discovery* (`plex_get_item`'s minimal
-mode now keeps subtitle-track `Stream[]` entries — 2026-08-03, see below).
+filter — 2026-08-03), subtitle *discovery* (`plex_get_item`'s minimal
+mode now keeps subtitle-track `Stream[]` entries — 2026-08-03, see
+below), and server log retrieval (`plex_download_logs` — 2026-08-03,
+see below).
 
 ### Subtitle discovery — done; content fetch — declined (2026-08-03)
 
@@ -314,34 +314,41 @@ into later episodes).
   session tracker polling `plex_now_playing` against subtitle timestamps —
   a different shape of feature entirely, out of scope for a single tool).
 
-### Server log retrieval (idea, not designed — 2026-08-03)
+### Server log retrieval ✓ pkkid — shipped 2026-08-03
 
 Motivated by wanting an LLM assistant to help troubleshoot Plex issues
 directly — "why did last night's recording fail," "why does this file
 keep failing to scan," "was there an error during that refresh" —
 rather than the operator manually pulling logs via the web UI (Settings
-→ Help → "Download Logs", which produces a ZIP bundle of PMS's log
-files) and pasting excerpts into a session by hand.
+→ Help → "Download Logs") and pasting excerpts into a session by hand.
 
-- **Endpoint shape is entirely unresearched** — no capture done, no
-  pkkid cross-check yet. The web UI's "Download Logs" flow is a known
-  starting point to trace (likely an authenticated diagnostics/support
-  endpoint returning a ZIP, not a single plain-text log), but nothing
-  here should be treated as confirmed until verified against a real
-  request the way every other capability in this doc is.
-- **Shape questions to resolve before designing a tool:** is the
-  response a ZIP (needs unpacking + picking the relevant log file) or
-  discrete per-component log streams (PMS, scanner, DLNA, etc.)? Is
-  there a way to filter/tail rather than pulling the whole bundle every
-  time — log files on a long-running server could be large. Does it
-  require a different auth path than the `X-Plex-Token` header already
-  used everywhere else (the web UI's download flow may go through
-  plex.tv rather than the local PMS API directly).
-- **Likely token-economy concern** — same class of problem this repo's
-  already hit with `plex_get_item`/`plex_browse` (full payload blowing
-  the response cap). Raw PMS logs are verbose; a useful tool probably
-  needs either a `since`/`tail` parameter or server-side filtering by
-  component/severity, not a raw dump.
+- **`GET /diagnostics/logs`**, same `X-Plex-Token` header auth as every
+  other call in this repo. Confirmed against python-plexapi's
+  `PlexServer.downloadLogs()` (identical endpoint), independently
+  corroborated by Plex's own support docs and an unrelated third-party
+  plugin before implementation — then confirmed for real against this
+  server: `plex_download_logs()` returns actual bytes with
+  `Content-Type: application/zip` (exactly as inferred beforehand) and
+  a real bundle size of **1.66 MB** on this install — far under the
+  50 MiB `MCP_LOG_MAX_BYTES` default cap, and fast enough that even a
+  30s timeout likely would have been fine (a 120s
+  `MCP_LOG_FETCH_TIMEOUT_MS` default is kept anyway as headroom for a
+  server with a lot more log history).
+- **Response is an unmodified ZIP**, saved to disk under
+  `MCP_LOG_SAVE_DIR` (default `/data/logs/`), same disk-write pattern as
+  `plex_save_image`/`MCP_IMAGE_SAVE_DIR` — the tool returns a manifest
+  (`path`, `bytes_written`, `mime_type`), never the archive content
+  inline. Not auto-unpacked: the exact internal layout wasn't
+  cross-checked, and unzip-on-write adds a failure mode for no clear
+  benefit when the caller can unzip the saved file directly (or via
+  filesystem-mcp, which already has that reach if the log save dir is
+  bind-mounted the same way `_mcp-scratch` is for images).
+- **No filtering/tail parameter exists** — neither python-plexapi's
+  wrapper (zero-parameter beyond local save options) nor any source
+  checked exposes one. A caller wanting "just tonight's errors" pulls
+  the whole bundle and greps the relevant file(s) themselves (or via a
+  follow-up filesystem-mcp read) rather than a server-side filter this
+  endpoint doesn't support.
 
 **Out of scope** (per scoping decision in v0.2): `DELETE /library/metadata/{key}`,
 `DELETE /library/sections/{id}`, and any other operation that destroys

@@ -39,6 +39,21 @@ the work rather than after the fact.
   them would make an invalid `MCP_TLS_DAYS` fail stdio-mode startups it
   doesn't affect today) or `src/plex.ts`'s per-call vars (already behind
   tested pure `resolve*()` functions).
+- `plex_list_collections`, `plex_hub_search`, and a `collection` filter
+  on `plex_browse` — collections support. All endpoints verified against
+  the real live Plex server (not just a deployed container) before
+  shipping.
+- Subtitle track discovery: `plex_get_item`'s `minimal=true` mode now
+  keeps subtitle-type `Stream[]` entries (language, codec, the
+  `hearingImpaired`/SDH flag) instead of dropping `Stream[]` entirely,
+  while still dropping the audio/video entries that were the actual
+  bulk of minimal mode's token savings.
+- `plex_download_logs` — fetch Plex Media Server's own diagnostic log
+  bundle (`GET /diagnostics/logs`) and save it to disk under
+  `MCP_LOG_SAVE_DIR` (default `/data/logs/`), same disk-write pattern as
+  `plex_save_image`. New `MCP_LOG_MAX_BYTES` (default 50 MiB) and
+  `MCP_LOG_FETCH_TIMEOUT_MS` (default 2 min) env vars — a log bundle has
+  a different size/latency profile than an image.
 
 ### Changed
 
