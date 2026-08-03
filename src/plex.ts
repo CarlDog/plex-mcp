@@ -11,6 +11,11 @@ interface PlexResponse<T> {
   MediaContainer?: T & { size?: number };
 }
 
+// Plex's internal numeric type code for a collection, at the section
+// "/all" listing level. Confirmed against python-plexapi's SEARCHTYPES
+// dict (plexapi/utils.py) — 'collection': 18.
+const PLEX_TYPE_COLLECTION = 18;
+
 const DEFAULT_IMAGE_MAX_BYTES = 4194304;
 
 /**
@@ -326,6 +331,32 @@ export class PlexClient {
     return data.MediaContainer?.Metadata ?? [];
   }
 
+  /**
+   * Plex's richer hub-based search. Unlike search() (plain GET /search),
+   * this surfaces collections and external/online metadata matches —
+   * an exact collection title returns [] from plain search but a real
+   * hit here. Response is Hub-grouped (same shape as hubs()/
+   * sectionHubs()/related()), not a flat Metadata[] list, since Plex
+   * buckets results by type (movies, shows, collections, etc.).
+   */
+  async hubSearch(
+    query: string,
+    options: { sectionId?: string; limit?: number } = {},
+  ): Promise<unknown[]> {
+    const params: Record<string, string> = {
+      query,
+      includeCollections: "1",
+      includeExternalMedia: "1",
+    };
+    if (options.sectionId !== undefined) params.sectionId = options.sectionId;
+    if (options.limit !== undefined) params.limit = String(options.limit);
+    const data = await this.request<{ Hub?: unknown[] }>(
+      "/hubs/search",
+      params,
+    );
+    return data.MediaContainer?.Hub ?? [];
+  }
+
   async recentlyAdded(sectionId?: string): Promise<unknown[]> {
     const path = sectionId
       ? `/library/sections/${sectionId}/recentlyAdded`
@@ -363,10 +394,14 @@ export class PlexClient {
 
     // Curated drop-list for minimal mode. These are the heavyweights:
     // Role[] alone is typically 80%+ of an item's payload on movies
-    // with deep casts. Stream[] inside each Media.Part adds another
-    // ~3KB per file. UltraBlurColors is purely cosmetic. The kept
-    // fields cover the operational use cases (file path, GUID,
-    // locked-field state, title/year/edition, viewed state).
+    // with deep casts. Audio/video Stream[] entries inside each
+    // Media.Part add another ~3KB per file. UltraBlurColors is purely
+    // cosmetic. The kept fields cover the operational use cases (file
+    // path, GUID, locked-field state, title/year/edition, viewed
+    // state) plus subtitle track discovery (kept, not dropped — see
+    // below): language/codec/id and the hearingImpaired (SDH) flag are
+    // cheap and useful, unlike the audio/video entries' per-frame
+    // codec detail that's the actual bulk cost.
     if (options.minimal) {
       const DROP_TOP_LEVEL = new Set([
         "Role",
@@ -379,6 +414,11 @@ export class PlexClient {
         "Style",
         "Mood",
       ]);
+      // Plex's Stream.streamType: 1 = video, 2 = audio, 3 = subtitle.
+      // Confirmed against python-plexapi's SubtitleStream.STREAMTYPE = 3
+      // and a live plex_now_playing capture showing video/audio entries
+      // as 1/2.
+      const SUBTITLE_STREAM_TYPE = 3;
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(item)) {
         if (DROP_TOP_LEVEL.has(k)) continue;
@@ -391,7 +431,12 @@ export class PlexClient {
                   (part) => {
                     const trimmedPart: Record<string, unknown> = {};
                     for (const [pk, pv] of Object.entries(part)) {
-                      if (pk === "Stream") continue;
+                      if (pk === "Stream") {
+                        trimmedPart[pk] = (
+                          pv as Array<Record<string, unknown>>
+                        ).filter((s) => s.streamType === SUBTITLE_STREAM_TYPE);
+                        continue;
+                      }
                       trimmedPart[pk] = pv;
                     }
                     return trimmedPart;
@@ -467,6 +512,7 @@ export class PlexClient {
       limit?: number;
       type?: number;
       fields?: string[];
+      collection?: string;
     } = {},
   ): Promise<{
     total: number;
@@ -485,6 +531,12 @@ export class PlexClient {
     };
     if (options.type !== undefined) {
       params.type = String(options.type);
+    }
+    // Matches by the collection's tag/title (e.g. "James Bond"), not a
+    // ratingKey — collection is a "tag"-type filter field in Plex's own
+    // filtering system, same family as genre/director/studio.
+    if (options.collection !== undefined) {
+      params.collection = options.collection;
     }
     const data = await this.request<{
       Metadata?: unknown[];
@@ -514,6 +566,27 @@ export class PlexClient {
       size: items.length,
       items,
     };
+  }
+
+  /**
+   * List collections in a library section. There is no dedicated
+   * "/collections" list endpoint — cross-validated against
+   * python-plexapi (LibrarySection.collections() calls search(libtype=
+   * 'collection'), which resolves to this exact same /all endpoint with
+   * a type filter). Thin wrapper over browse(): collections are just
+   * another Plex "type" (18) at the section-listing level, same
+   * endpoint plex_browse already hits.
+   */
+  async listCollections(
+    sectionId: string,
+    options: { offset?: number; limit?: number; fields?: string[] } = {},
+  ): Promise<{
+    total: number;
+    offset: number;
+    size: number;
+    items: unknown[];
+  }> {
+    return this.browse(sectionId, { ...options, type: PLEX_TYPE_COLLECTION });
   }
 
   async markWatched(ratingKey: string): Promise<void> {

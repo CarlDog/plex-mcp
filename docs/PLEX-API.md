@@ -254,13 +254,17 @@ below). Shapes without ✓ are speculative.
 | Empty section trash ✓ pkkid             | `PUT /library/sections/{id}/emptyTrash`                                                  | Medium (irreversible)    |
 | Analyze section ✓ pkkid                 | `PUT /library/sections/{id}/analyze`                                                     | Medium (server load)     |
 | Continue Watching hub explicit ✓ pkkid  | `GET /hubs/continueWatching/items`                                                       | Low                      |
-| Hub-search (richer than `/search`) ✓ pkkid | `GET /hubs/search?query=&limit=&sectionId=&includeCollections=1&includeExternalMedia=1` | Low (additive vs `plex_search`) |
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |
 | Currently transcoding sessions          | `GET /transcode/sessions`                                                                | Low                      |
-| Subtitle track discovery + content      | See below                                                                                 | Low (discovery) / Unresearched (content) |
+| Subtitle content (dialogue text)        | Not implemented — no endpoint evidence, see below                                        | Declined — no evidence   |
 | Server log retrieval                    | See below                                                                                 | Unresearched              |
 
-### Subtitle track discovery + content (idea, not designed — 2026-08-02)
+Built since the table above was last swept: collections support
+(`plex_list_collections`, `plex_hub_search`, `plex_browse`'s `collection`
+filter — 2026-08-03) and subtitle *discovery* (`plex_get_item`'s minimal
+mode now keeps subtitle-track `Stream[]` entries — 2026-08-03, see below).
+
+### Subtitle discovery — done; content fetch — declined (2026-08-03)
 
 Motivated by plex-companion wanting richer, more accurate context for its
 watch-along reactions than a Plex synopsis + web search can give — subtitle
@@ -268,34 +272,47 @@ text is exactly what was watched, timestamped, and inherently spoiler-safe
 up to the current position (unlike a web search, which can't help wandering
 into later episodes).
 
-- **Discovery is nearly free — the plumbing already exists, just discarded.**
-  `PlexClient.getItem`'s minimal mode strips `Media[].Part[].Stream[]`
-  (`src/plex.ts` ~line 300) as one of two heavyweight drops. That array is
-  where Plex reports each subtitle track's language/codec/id when present.
-  Not stripping it (or requesting via `fields`) surfaces track metadata with
-  no new endpoint — but that's metadata only (does a track exist, what
-  language), not the subtitle text itself.
-- **Fetching actual subtitle content is unresearched** — no endpoint shape
-  captured yet. Likely lives under `/library/streams/{streamId}` or a
-  part-relative download path; needs the plexapi.dev / pkkid sources checked
-  before building.
-- **Prefer SDH tracks over plain subtitles when both exist.** SDH
-  (Subtitles for the Deaf and Hard-of-hearing) includes bracketed
-  non-dialogue cues — `[thunder rumbles]`, `[tense music playing]`, `[door
-  creaks]` — describing what's happening in the audio, not just what's
-  said. For a companion reacting to atmosphere and sound design, not just
-  dialogue, that's real signal plain subtitles omit entirely. Plain
-  subtitles are an acceptable fallback when no SDH track exists, just
-  thinner. Track selection would need to check the `Stream` entry's
-  hearing-impaired flag (exact field TBD — check pkkid's `media.py`
-  `SubtitleStream` class) and prefer it over a plain track in the same
-  language.
-- Two distinct capabilities: static content enrichment (fetch the whole
-  subtitle file, feed a condensed version into a lore/context prompt — cheap,
-  fits a request/response tool) vs. live position-correlated interjections
-  (needs an active session tracker polling `plex_now_playing` against
-  subtitle timestamps — a different shape of feature entirely, out of scope
-  for a single tool).
+- **Discovery: done.** `plex_get_item`'s `minimal=true` mode used to strip
+  `Media[].Part[].Stream[]` entirely; it now keeps only subtitle-type
+  entries (`streamType === 3` — confirmed against python-plexapi's
+  `SubtitleStream.STREAMTYPE = 3` class attribute and a live
+  `plex_now_playing` capture showing video/audio entries as
+  `streamType` 1/2) while still dropping the audio/video entries that were
+  the actual bulk of the ~3KB/file minimal-mode cost. Each surviving entry
+  includes `language`, `codec`, and **`hearingImpaired`** (the confirmed
+  real field name for the SDH flag — bool, default `false`) — SDH tracks
+  include bracketed non-dialogue cues (`[thunder rumbles]`, `[door
+  creaks]`) that plain subtitles omit, real signal for a companion reacting
+  to atmosphere, not just dialogue. Prefer a `hearingImpaired: true` track
+  over a plain one in the same language when both exist; a plain track is
+  an acceptable fallback.
+- **Content fetch: declined, not just unresearched.** Checked
+  python-plexapi (`pushingkarmaorg/python-plexapi@master`) directly —
+  `SubtitleStream`'s only method is `setSelected()` (toggles which stream
+  is active for playback, fetches nothing). The one generic
+  `download()` method in the library (`Playable.download()`,
+  `base.py`) only downloads a whole `MediaPart` file via `part.key`, with
+  no code path targeting an individual stream. The `subtitles`-named
+  methods that do exist (`uploadSubtitles`, `searchSubtitles`,
+  `downloadSubtitles`, `removeSubtitles` — `video.py`) all manage *which*
+  subtitle file is attached to an item (upload one, search an
+  OpenSubtitles-style provider, ask the **server** to fetch+attach a
+  match, remove one) — none of them read dialogue text back to the
+  caller. `downloadSubtitles()`'s name is misleading: it's async and
+  returns nothing to the Python caller, per its own docstring. No literal
+  path resembling `/library/streams/{id}/content` or a transcoder-based
+  subtitle URL appears anywhere in the source. This reads as a genuine
+  gap in the wrapper (or a feature Plex Web renders client-side via a
+  mechanism the wrapper never attempted), not a confirmed dead end —
+  pursuing it further would need live packet-capture of Plex Web's own
+  network calls against a real PMS instance while subtitles render,
+  which is out of scope without that setup.
+- Two distinct capabilities, if content fetch is ever unblocked: static
+  content enrichment (fetch the whole subtitle file, feed a condensed
+  version into a lore/context prompt — cheap, fits a request/response
+  tool) vs. live position-correlated interjections (needs an active
+  session tracker polling `plex_now_playing` against subtitle timestamps —
+  a different shape of feature entirely, out of scope for a single tool).
 
 ### Server log retrieval (idea, not designed — 2026-08-03)
 
@@ -341,13 +358,15 @@ operation. Match unless noted below.
 
 ### Known shape divergences (both work; we pick the simpler one)
 
-- **`plex_search` uses `/search?query=` (legacy/simple).** pkkid's
-  `Server.search()` uses `/hubs/search` with `includeCollections=1`,
-  `includeExternalMedia=1`, and returns Hub-grouped results. Both
-  endpoints exist; `/search` is a lighter flat-list response, the
-  one we've used since v0.1. Adding a richer search variant via
-  `/hubs/search` is captured in "Endpoints we haven't built yet"
-  above.
+- **`plex_search` uses `/search?query=` (legacy/simple); `plex_hub_search`
+  (added 2026-08-03) uses `/hubs/search`.** pkkid's `Server.search()`
+  matches `plex_hub_search` exactly: `includeCollections=1`,
+  `includeExternalMedia=1`, Hub-grouped results. Both endpoints coexist
+  deliberately — `/search` stays the lighter flat-list response `plex_search`
+  has used since v0.1 (not modified, to avoid changing its existing
+  response shape for callers), `plex_hub_search` is the additive richer
+  variant that also surfaces collections and external-media matches
+  `/search` misses entirely.
 - **`plex_edit_metadata` uses `PUT /library/metadata/{rk}?...` (direct).**
   pkkid edits via `PUT /library/sections/{section_id}/all?id={rk}&type={typeCode}&<field>.value=&<field>.locked=`
   — same `.value=` / `.locked=` shape but routed through the

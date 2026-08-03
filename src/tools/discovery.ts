@@ -49,6 +49,35 @@ export function registerDiscoveryTools(
   );
 
   server.registerTool(
+    "plex_hub_search",
+    {
+      title: "Plex Hub Search",
+      description:
+        "Richer search than plex_search: surfaces collections and external/online metadata matches that plain search misses entirely (plex_search's underlying endpoint returns [] for an exact collection title). Results are grouped into hubs by type (movies, shows, collections, etc.) rather than a flat list — each hub has its own title and items array.",
+      inputSchema: {
+        query: z.string().describe("Search query"),
+        section_id: z
+          .string()
+          .optional()
+          .describe("Optional library section ID to scope the search to"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe(
+            "Max results per hub (Plex's own default applies if omitted)",
+          ),
+      },
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    withLogging("plex_hub_search", async ({ query, section_id, limit }) =>
+      asText(await plex.hubSearch(query, { sectionId: section_id, limit })),
+    ),
+  );
+
+  server.registerTool(
     "plex_recently_added",
     {
       title: "Plex Recently Added",
@@ -84,7 +113,7 @@ export function registerDiscoveryTools(
     {
       title: "Get Plex Item",
       description:
-        "Get metadata for a specific item by rating key. Full-shape responses can exceed 80–100KB on movies with deep casts — Role[] alone is typically 80%+ of the payload. Pass `minimal=true` for a curated lean view (drops Role/Director/Writer/Producer/Image/UltraBlurColors/Country/Style/Mood top-level arrays plus Stream[] inside each Media.Part; keeps Guid[], Media.Part.file, Field[] lock state, edition titles, viewed state). Pass `fields=[...]` for explicit allowlist projection. `fields` wins over `minimal` if both are set.",
+        "Get metadata for a specific item by rating key. Full-shape responses can exceed 80–100KB on movies with deep casts — Role[] alone is typically 80%+ of the payload. Pass `minimal=true` for a curated lean view (drops Role/Director/Writer/Producer/Image/UltraBlurColors/Country/Style/Mood top-level arrays; keeps Guid[], Media.Part.file, Field[] lock state, edition titles, viewed state). Media.Part.Stream[] is filtered to subtitle tracks only (audio/video codec-detail entries are dropped, which is the actual bulk cost) — each surviving entry includes language, codec, and `hearingImpaired` (true for SDH tracks, which describe non-dialogue audio like `[door creaks]` and are usually preferable to a plain subtitle track when both exist for the same language). Pass `fields=[...]` for explicit allowlist projection. `fields` wins over `minimal` if both are set.",
       inputSchema: {
         rating_key: z.string().describe("The Plex rating key (item ID)"),
         minimal: z
@@ -166,19 +195,67 @@ export function registerDiscoveryTools(
           .describe(
             "If provided, each returned item is projected to just these keys. For audits, ['ratingKey','title','year','type'] is usually enough.",
           ),
+        collection: z
+          .string()
+          .optional()
+          .describe(
+            "Filter to items belonging to this collection, by collection title (e.g. 'James Bond') — not a ratingKey. Get titles from plex_list_collections.",
+          ),
       },
       annotations: READ_ONLY_ANNOTATIONS,
     },
     withLogging(
       "plex_browse",
-      async ({ section_id, offset, limit, type, fields }) =>
+      async ({ section_id, offset, limit, type, fields, collection }) =>
         asText(
           await plex.browse(section_id, {
             offset,
             limit,
             type: type ? PLEX_TYPE_CODES[type] : undefined,
             fields,
+            collection,
           }),
+        ),
+    ),
+  );
+
+  server.registerTool(
+    "plex_list_collections",
+    {
+      title: "List Plex Collections",
+      description:
+        "List collections (curated groups of movies/shows/etc.) in a library section, paged like plex_browse. Collections are NOT returned by plex_browse or plex_search — this is the only way to discover them by section (plex_hub_search finds them by name instead). Once you have a collection's ratingKey, plex_get_item and plex_get_children work on it exactly like any other item — a collection's key is /library/metadata/{ratingKey}, same as everything else.",
+      inputSchema: {
+        section_id: z
+          .string()
+          .describe("Library section ID (from plex_list_libraries)"),
+        offset: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Pagination offset (default 0)"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe("Page size, max 200 (default 50)"),
+        fields: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "If provided, each returned collection is projected to just these keys. ['ratingKey','title','childCount'] is usually enough.",
+          ),
+      },
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    withLogging(
+      "plex_list_collections",
+      async ({ section_id, offset, limit, fields }) =>
+        asText(
+          await plex.listCollections(section_id, { offset, limit, fields }),
         ),
     ),
   );

@@ -28,6 +28,9 @@ interface Fixtures {
   showSectionId: string;
   showRatingKey: string;
   roundTripRatingKey: string | null;
+  collectionSectionId: string | null;
+  collectionRatingKey: string | null;
+  collectionTitle: string | null;
 }
 
 describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
@@ -62,10 +65,34 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     const recentEntry = historyResult.items[0] as
       { ratingKey: string } | undefined;
 
+    // Not every section has collections, and which one does varies by
+    // library — try each until one has at least one, rather than
+    // assuming a specific section. Nullable in Fixtures; tests that
+    // need a real collection skip gracefully if none exists anywhere.
+    let collectionSectionId: string | null = null;
+    let collectionRatingKey: string | null = null;
+    let collectionTitle: string | null = null;
+    for (const lib of libs) {
+      const collectionsResult = await client.listCollections(lib.key, {
+        limit: 1,
+      });
+      const firstCollection = collectionsResult.items[0] as
+        { ratingKey: string; title: string } | undefined;
+      if (firstCollection) {
+        collectionSectionId = lib.key;
+        collectionRatingKey = firstCollection.ratingKey;
+        collectionTitle = firstCollection.title;
+        break;
+      }
+    }
+
     fixtures = {
       showSectionId: showLib.key,
       showRatingKey: firstShow.ratingKey,
       roundTripRatingKey: recentEntry?.ratingKey ?? null,
+      collectionSectionId,
+      collectionRatingKey,
+      collectionTitle,
     };
   });
 
@@ -120,7 +147,9 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     }
     // Top-level identity fields survive.
     expect(minimal!.ratingKey).toBe(fixtures.showRatingKey);
-    // If Media[] exists, Stream[] inside each Part is gone but file remains.
+    // If Media[] exists, Stream[] inside each Part keeps only
+    // subtitle-track entries (not stripped entirely — see the dedicated
+    // subtitle-discovery test below) but file remains.
     const fullMedia = (full?.Media as Array<Record<string, unknown>>) ?? [];
     if (fullMedia.length > 0) {
       const minMedia = minimal!.Media as Array<Record<string, unknown>>;
@@ -129,11 +158,42 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
         minMedia[0]?.Part as Array<Record<string, unknown>>
       )?.[0];
       if (firstPart) {
-        expect("Stream" in firstPart).toBe(false);
+        const streams = firstPart.Stream as
+          Array<{ streamType?: number }> | undefined;
+        if (streams) {
+          expect(streams.every((s) => s.streamType === 3)).toBe(true);
+        }
         // file may be undefined for shows (which don't have media), but
         // the key shouldn't be stripped if Plex sent it.
       }
     }
+  });
+
+  it("getItem minimal mode keeps only subtitle-type Stream entries (MCP subtitle discovery)", async () => {
+    if (!fixtures.roundTripRatingKey) return;
+    const full = (await client.getItem(fixtures.roundTripRatingKey)) as
+      Record<string, unknown> | undefined;
+    const minimal = (await client.getItem(fixtures.roundTripRatingKey, {
+      minimal: true,
+    })) as Record<string, unknown> | undefined;
+    const fullMedia = (full?.Media as Array<Record<string, unknown>>) ?? [];
+    const minMedia = (minimal?.Media as Array<Record<string, unknown>>) ?? [];
+    if (fullMedia.length === 0 || minMedia.length === 0) return;
+    const fullStreams =
+      ((fullMedia[0]?.Part as Array<Record<string, unknown>>)?.[0]
+        ?.Stream as Array<{ streamType?: number }>) ?? [];
+    const minStreams =
+      ((minMedia[0]?.Part as Array<Record<string, unknown>>)?.[0]
+        ?.Stream as Array<{ streamType?: number }>) ?? [];
+    // Every surviving stream must be a subtitle track...
+    expect(minStreams.every((s) => s.streamType === 3)).toBe(true);
+    // ...and every subtitle track from the full response must survive
+    // (not just "no non-subtitle streams," but "no subtitle streams
+    // lost either").
+    const fullSubtitleCount = fullStreams.filter(
+      (s) => s.streamType === 3,
+    ).length;
+    expect(minStreams.length).toBe(fullSubtitleCount);
   });
 
   it("getItem with explicit fields returns only those keys", async () => {
@@ -324,6 +384,88 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
           (i) => i.type === "show",
         ),
       ).toBe(true);
+    });
+  });
+
+  describe("collections", () => {
+    it("listCollections returns an array", async () => {
+      // Even a section fixture discovery found no collection in still
+      // returns an array (just possibly empty) — this asserts the
+      // endpoint call itself works everywhere, independent of whether
+      // any section actually has a collection.
+      const result = await client.listCollections(fixtures.showSectionId);
+      expect(Array.isArray(result.items)).toBe(true);
+    });
+
+    it("a real collection has ratingKey/title/childCount", async () => {
+      if (!fixtures.collectionSectionId || !fixtures.collectionRatingKey) {
+        // No collection exists anywhere on this server — nothing to
+        // assert against. Not a failure; just an environment without
+        // fixture data for this test.
+        return;
+      }
+      const result = await client.listCollections(fixtures.collectionSectionId);
+      const found = (
+        result.items as Array<{
+          ratingKey: string;
+          title: string;
+          childCount?: number;
+        }>
+      ).find((c) => c.ratingKey === fixtures.collectionRatingKey);
+      expect(found).toBeDefined();
+      expect(found?.title).toBe(fixtures.collectionTitle);
+      expect(typeof found?.childCount).toBe("number");
+    });
+
+    it("getItem resolves a real collection's ratingKey directly (MCP-S01 research: collections use /library/metadata, not a separate path)", async () => {
+      if (!fixtures.collectionRatingKey) return;
+      const item = (await client.getItem(fixtures.collectionRatingKey)) as
+        { ratingKey: string; title: string } | undefined;
+      expect(item).toBeDefined();
+      expect(item?.ratingKey).toBe(fixtures.collectionRatingKey);
+      expect(item?.title).toBe(fixtures.collectionTitle);
+    });
+
+    it("getChildren returns the collection's member items", async () => {
+      if (!fixtures.collectionRatingKey) return;
+      const children = await client.getChildren(fixtures.collectionRatingKey);
+      expect(Array.isArray(children)).toBe(true);
+      expect(children.length).toBeGreaterThan(0);
+    });
+
+    it("hubSearch finds a collection by exact title (plain search() cannot)", async () => {
+      if (!fixtures.collectionTitle) return;
+      const hubs = (await client.hubSearch(fixtures.collectionTitle)) as Array<{
+        type?: string;
+        Metadata?: Array<{ ratingKey: string }>;
+      }>;
+      const matched = hubs.some((hub) =>
+        (hub.Metadata ?? []).some(
+          (item) => item.ratingKey === fixtures.collectionRatingKey,
+        ),
+      );
+      expect(matched).toBe(true);
+    });
+
+    it("browse with a collection filter narrows to that collection's members", async () => {
+      if (!fixtures.collectionSectionId || !fixtures.collectionTitle) return;
+      const result = await client.browse(fixtures.collectionSectionId, {
+        collection: fixtures.collectionTitle,
+        limit: 50,
+      });
+      expect(result.items.length).toBeGreaterThan(0);
+      // Every item returned should actually be a member of the
+      // collection — cross-check against getChildren's own member list.
+      const memberKeys = new Set(
+        (
+          (await client.getChildren(fixtures.collectionRatingKey!)) as Array<{
+            ratingKey: string;
+          }>
+        ).map((m) => m.ratingKey),
+      );
+      for (const item of result.items as Array<{ ratingKey: string }>) {
+        expect(memberKeys.has(item.ratingKey)).toBe(true);
+      }
     });
   });
 
