@@ -688,22 +688,22 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
   describe.sequential("unmatch round trip", () => {
     let originalGuid: string | undefined;
     let originalTitle: string | undefined;
-    let originalAgent: string | undefined;
 
     beforeAll(async () => {
       const item = (await client.getItem(fixtures.showRatingKey)) as {
         guid?: string;
         title?: string;
-        librarySectionAgent?: string;
       };
       originalGuid = item.guid;
       originalTitle = item.title;
-      originalAgent = item.librarySectionAgent;
     });
 
     afterAll(async () => {
       if (!originalGuid || !originalTitle) return;
-      if (originalGuid.startsWith("local://")) return;
+      // Unmatched-GUID format is tv.plex.agents.none://<ratingKey> (not
+      // local://, which doesn't occur on items — confirmed live and
+      // matches the guard fix in the "it" block below).
+      if (originalGuid.startsWith("tv.plex.agents.none://")) return;
       try {
         await client.applyMatch(
           fixtures.showRatingKey,
@@ -716,14 +716,22 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     });
 
     it("unmatch followed by applyMatch restores the original binding", async () => {
+      // Guard was checking a nonexistent field (librarySectionAgent
+      // lives on the library section, never on an item) and the wrong
+      // unmatched-GUID prefix (local:// never occurs; the real one is
+      // tv.plex.agents.none://<ratingKey>, same as the neighboring
+      // applyMatch test's guard above). Root-caused via phase-end audit
+      // (2026-08-03): both bugs made this guard never fire, so the test
+      // ran unmatch() against a fixture that was already unmatched in
+      // production — a no-op that made the assertion below fail
+      // deterministically, not flakily.
       if (
         !originalGuid ||
         !originalTitle ||
-        originalGuid.startsWith("local://") ||
-        originalAgent?.endsWith(".agents.none")
+        originalGuid.startsWith("tv.plex.agents.none://")
       ) {
         console.warn(
-          "[skip] fixture is unmatched or local-only; unmatch round-trip not exercised",
+          "[skip] fixture is unmatched; unmatch round-trip not exercised",
         );
         return;
       }
