@@ -713,8 +713,17 @@ downloader-mcp.
     the codebase routes through one of these two methods; verified
     both the JSON-parsing and no-content paths live against the
     deployed container, not just the local test suite) and
-    `fetchBinary`/`downloadLogs`'s byte-cap-check duplication (still
-    queued — different cap/timeout sources to reconcile).
+    `fetchBinary`/`downloadLogs`'s byte-cap-check duplication
+    (**also done as a follow-up, same day** — extracted to
+    `fetchCappedBinary()`, taking the two-stage content-length/
+    actual-byte-count cap check plus fetch/error handling as shared
+    logic while leaving each call site's same-origin check, headers,
+    cap source, and default MIME type as options. Error-message
+    wording verified byte-for-byte identical to the original for both
+    call sites. Verified live against the deployed container: both
+    `plex_get_image` (transcoded fetch) and `plex_download_logs`
+    (1,664,109-byte real bundle) succeeded post-redeploy). The
+    refactor/streamline scan's queue is now fully closed.
   - **Real bug found and fixed**: `resolveIntEnv`'s old per-copy
     bodies only guarded `NaN` — `MCP_LOG_FETCH_TIMEOUT_MS="-1"` reached
     `AbortSignal.timeout(-1)` and threw a raw Node `RangeError`

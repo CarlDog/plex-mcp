@@ -67,9 +67,13 @@ the work rather than after the fact.
   `plex_save_image`'s argument validation; extracted `sendRequest` to
   deduplicate `request<T>`/`requestNoContent`'s shared fetch-and-error
   contract — the highest-leverage dedup of the batch, since every tool
-  routes through one of these two methods. Doc drift fixed: README's
-  tool table and env-var docs, CLAUDE.md's file listing, a stale
-  STATUS.md "Next" item.
+  routes through one of these two methods; extracted `fetchCappedBinary`
+  to deduplicate `fetchBinary`/`downloadLogs`'s two-stage byte-cap-check
+  logic (content-length header, then actual decoded byte count) while
+  keeping each call site's own same-origin check, headers, cap source,
+  and default MIME type as options. Doc drift fixed: README's tool
+  table and env-var docs, CLAUDE.md's file listing, a stale STATUS.md
+  "Next" item.
 - **Breaking (tool input shape):** `plex_delete_playlist`, `plex_split_item`,
   and `plex_merge_items` now require `confirm_title` /
   `confirm_into_title` matching the target's actual current title
