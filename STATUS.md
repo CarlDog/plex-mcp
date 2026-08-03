@@ -379,15 +379,57 @@ downloader-mcp.
     in step — the test is what keeps them honest).
   Deferred to a follow-up discussion (judgment calls, not
   mechanical): UNI-16 (internal hostname/paths in tracked files,
-  fleet-wide), MCP-F03 (HTTP transport has no auth/Host-allowlist/
-  bind-host/idle-eviction — CLAUDE.md already documents this as an
-  accepted LAN-only tradeoff), MCP-P06 (name-confirmation on
-  destructive tools), MCP-P04/P05 (redaction chokepoint + log
-  verbosity), MCP-F01/F02 (fetch timeouts + retry/backoff), MCP-S01
-  (whether to adopt the fleet's `src/shared/` layer wholesale or just
-  fill its couple of genuine gaps — leaning toward the latter, this
-  repo predates the convention and has working hand-rolled
-  equivalents).
+  fleet-wide — resolved as a non-issue for this repo's current tree,
+  see below), MCP-F03 (HTTP transport hardening — resolved, see
+  below), MCP-P06 (name-confirmation on destructive tools), MCP-P04/P05
+  (redaction chokepoint + log verbosity), MCP-F01/F02 (fetch timeouts +
+  retry/backoff), MCP-S01 (whether to adopt the fleet's `src/shared/`
+  layer wholesale or just fill its couple of genuine gaps — leaning
+  toward the latter, this repo predates the convention and has working
+  hand-rolled equivalents).
+- **UNI-16 re-verified and closed as a non-issue for this repo's current
+  tree (2026-08-03).** The audit's cited evidence for `docker-compose.yml`
+  (a literal real hostname in the TLS SAN example) doesn't match what
+  `git blame` shows was ever committed — that example has said
+  `"your-nas"` since it was introduced. `CLAUDE.md` has zero matches;
+  `STATUS.md`'s only matches are generic `/volume1/Media/...` paths (every
+  Synology NAS uses `/volume1`), not a hostname. The only real residue is
+  3 old commit messages mentioning the real hostname in prose — not worth
+  a history rewrite (the UNI-15 remediation shape) for a LAN-only,
+  non-internet-resolvable name.
+- **MCP-F03 HTTP transport hardening closed (2026-08-03).** Two of the
+  four flagged gaps addressed; the other two stay deliberately deferred:
+  - **Host/Origin allowlist (DNS-rebinding defense) — added.**
+    `MCP_ALLOWED_HOSTS` (required in HTTP mode; server refuses to start
+    without it, `docker compose config` fails the same way) and
+    `MCP_ALLOWED_ORIGINS` (optional, default empty) gate `/mcp` in
+    `src/index.ts`. The MCP SDK's own `allowedHosts`/`allowedOrigins`/
+    `enableDnsRebindingProtection` transport options are `@deprecated`
+    in favor of external middleware, so this is hand-rolled instead.
+    `/health` stays unguarded (no side effects, and the Docker
+    `HEALTHCHECK` needs it reachable). Verified locally: missing
+    `MCP_ALLOWED_HOSTS` exits 1 at startup; correct Host reaches the
+    handler; wrong Host → 421; correct Host + disallowed Origin → 403;
+    `/health` stays 200 regardless of Host.
+  - **Idle-session eviction — added.** `transports` previously only
+    cleaned up via client-initiated `onclose`; a client that disappears
+    uncleanly (crash, network drop) leaked its session forever in this
+    long-running container. A `lastActivity`-tracked, `.unref()`'d sweep
+    (`MCP_SESSION_IDLE_TIMEOUT_MS`, default 1h) now evicts and closes
+    idle sessions. Verified locally with a 3s timeout: session created,
+    evicted after ~4.6s idle, subsequent use of the evicted session-id
+    correctly falls through to the unknown-session branch.
+  - **Bearer-token auth — still deferred.** Nothing changed here:
+    still LAN-only, no internet exposure, matches CLAUDE.md's existing
+    accepted tradeoff. Revisit alongside the ChatGPT Apps SDK Phase 2
+    OAuth work rather than building a bespoke scheme now.
+  - **`MCP_BIND_HOST` — still not applicable.** Binding a specific
+    interface means nothing extra inside a container (docker-deployments.md
+    rule #8); the allowlist is the real boundary, not the bind address.
+  - **Deploy sequencing, learned from the `HOST_IMAGE_DIR` incident:**
+    set `MCP_ALLOWED_HOSTS` on the Portainer stack *before* shipping this
+    code, so there's no window where a redeploy lands with enforcement
+    on but the allowlist unset.
 - **MCP-E02 compose-parameterization gap closed (2026-07-31).** Flagged
   by the same audit that containerized kindroid-mcp: `docker-compose.yml`
   hardcoded the `volumes:` host path to an absolute NAS path

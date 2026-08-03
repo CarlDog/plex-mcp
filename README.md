@@ -158,6 +158,7 @@ linux/amd64 + linux/arm64), published by CI on every push to `main`.
 # Required env vars (or use a .env file):
 export PLEX_URL=http://192.168.1.50:32400
 export PLEX_TOKEN=your-token
+export MCP_ALLOWED_HOSTS=nas.local:3001  # required — see below
 export HOST_PORT=3001  # optional, defaults to 3001
 
 docker compose up
@@ -177,10 +178,34 @@ docker compose up
 1. In Portainer, *Stacks → Add Stack → Repository*.
 2. Repository URL: `https://github.com/CarlDog/plex-mcp`
 3. Compose path: `docker-compose.yml`
-4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`, and
-   `HOST_IMAGE_DIR` (**required** for git stacks — see below);
-   optionally `HOST_PORT`.
+4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`,
+   `MCP_ALLOWED_HOSTS` (**required** — see below), and `HOST_IMAGE_DIR`
+   (**required** for git stacks — see below); optionally `HOST_PORT`.
 5. Deploy. Healthcheck reaches green within ~10 seconds.
+
+### `MCP_ALLOWED_HOSTS` is required in HTTP mode
+
+Comma-separated list of `Host` header values the server accepts on
+`/mcp` — e.g. `nas.local:3001` (must match whatever host:port a client
+actually dials, including the mapped `HOST_PORT`). The server refuses
+to start in HTTP mode without it, and `docker compose config` fails
+the same way if it's unset — both fail before the container ever
+comes up, deliberately, rather than starting in a silently-unprotected
+state.
+
+This exists because binding `0.0.0.0` inside a container isn't a real
+access boundary the way loopback binding is on a bare host: a page
+loaded in a browser anywhere on the LAN can perform DNS rebinding —
+pointing its own hostname at this container's IP — and drive tools
+(including writes like `plex_delete_playlist`) as a confused deputy,
+entirely bypassing "LAN-only, no bearer token" as a security posture.
+The Host allowlist closes that gap without requiring full
+authentication. `MCP_ALLOWED_ORIGINS` (optional, default empty) does
+the same for the `Origin` header — leave it unset unless a
+browser-based client legitimately needs to call this server directly;
+non-browser clients (the `mcp-remote` bridge, a direct `fetch`) never
+send an `Origin` header, so the empty default only ever rejects the
+request shape a DNS-rebinding attack actually sends.
 
 ### `HOST_IMAGE_DIR` is required for git-stack deploys
 
@@ -245,7 +270,7 @@ shared directory.
 npm install
 cp .env.example .env  # then edit
 PLEX_URL=... PLEX_TOKEN=... npm run dev               # stdio
-MCP_PORT=3000 PLEX_URL=... PLEX_TOKEN=... npm run dev # HTTP
+MCP_PORT=3000 MCP_ALLOWED_HOSTS=localhost:3000 PLEX_URL=... PLEX_TOKEN=... npm run dev # HTTP
 ```
 
 ## Logging

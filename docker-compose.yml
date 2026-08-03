@@ -11,6 +11,26 @@ services:
       PLEX_URL: "${PLEX_URL}"
       PLEX_TOKEN: "${PLEX_TOKEN}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # Required in HTTP mode (MCP-F03): comma-separated Host header values
+      # this server accepts on /mcp. Must include whatever host:port a
+      # client actually dials — e.g. your-nas:3001 for the mapped HOST_PORT
+      # above. Defends against DNS rebinding: without this, a page loaded
+      # in a LAN browser could rebind its own hostname to this container's
+      # IP and drive tools (including writes) as a confused deputy — "LAN
+      # only, no auth" is not a real boundary against that attack shape.
+      # The server refuses to start in HTTP mode without it.
+      MCP_ALLOWED_HOSTS: "${MCP_ALLOWED_HOSTS:?MCP_ALLOWED_HOSTS must be set, e.g. your-nas:3001 — see docker-deployments.md rule #8}"
+      # Optional: comma-separated Origin header values to accept. Leave
+      # unset (default) unless a browser-based client legitimately needs to
+      # call this server directly — non-browser clients (the mcp-remote
+      # bridge, a direct fetch) never send an Origin header at all, so the
+      # empty default rejects only the request shape a DNS-rebinding
+      # attack actually sends.
+      MCP_ALLOWED_ORIGINS: "${MCP_ALLOWED_ORIGINS:-}"
+      # Optional: evict an MCP session after this many idle milliseconds
+      # (no activity, not total lifetime). Default 1 hour. Guards against
+      # sessions leaking forever when a client disappears uncleanly.
+      MCP_SESSION_IDLE_TIMEOUT_MS: "${MCP_SESSION_IDLE_TIMEOUT_MS:-3600000}"
       # Optional HTTPS — pick ONE of the two modes below.
       #
       # (a) Self-managed cert (recommended for LAN-only deployment):

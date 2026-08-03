@@ -63,6 +63,15 @@ the work rather than after the fact.
 - A personal-domain email that had reached public commit history via a
   merge commit created outside the local pre-commit hook's reach was
   scrubbed from history.
+- HTTP transport hardening (MCP-F03): `MCP_ALLOWED_HOSTS` (required) and
+  `MCP_ALLOWED_ORIGINS` (optional) allowlist the `Host`/`Origin` headers
+  accepted on `/mcp`, closing a DNS-rebinding gap — binding `0.0.0.0`
+  inside a container isn't a real access boundary, so a page loaded in a
+  LAN browser could otherwise rebind its own hostname to the container's
+  IP and drive tools (including writes) as a confused deputy. Idle MCP
+  sessions are now swept and closed after `MCP_SESSION_IDLE_TIMEOUT_MS`
+  (default 1h) of inactivity, since a client that disappears uncleanly
+  previously leaked its transport forever.
 
 ## [0.7.1] - 2026-05-17
 

@@ -121,9 +121,13 @@ docker compose up --build
   JSON-stringified text content block.
 - Plex auth via env vars `PLEX_URL` and `PLEX_TOKEN`. The container is
   stateless; the token never lands on disk in the image.
-- HTTP mode currently has **no auth** — bind only to private networks.
-  Rely on host firewall / LAN isolation. Add a bearer token if ever
-  exposed beyond a trusted network.
+- HTTP mode currently has **no bearer-token auth** — bind only to
+  private networks. It does enforce a required `MCP_ALLOWED_HOSTS`
+  (and optional `MCP_ALLOWED_ORIGINS`) allowlist on `/mcp` as a
+  DNS-rebinding guard (`src/index.ts`) — that closes the "malicious
+  LAN webpage drives tools via the browser" gap, but is not a
+  substitute for real auth. Add a bearer token if ever exposed beyond
+  a trusted network.
 - **Git workflow: commit directly to `main` and push.** This is a
   personal repo — no PRs, no feature branches, no review gate. Releases
   are tagged directly on `main` (`git tag -a vX.Y.Z`). The pre-commit
