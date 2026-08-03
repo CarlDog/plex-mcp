@@ -24,6 +24,10 @@ const PLEX_URL = process.env.PLEX_URL;
 const PLEX_TOKEN = process.env.PLEX_TOKEN;
 const hasEnv = !!(PLEX_URL && PLEX_TOKEN);
 
+// Stable, purpose-built test-image endpoint (not tied to any specific
+// fixture item's real match) for the poster upload round trip below.
+const TEST_POSTER_URL = "https://httpbin.org/image/jpeg";
+
 interface Fixtures {
   showSectionId: string;
   showRatingKey: string;
@@ -804,6 +808,113 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       expect(after.summary).toBe(originalSummary);
     });
   });
+
+  // SIDE EFFECT: exercises uploadPoster/setPoster against a real item's
+  // real poster selection. afterAll restores the original selection
+  // (best-effort); the uploaded test candidate itself isn't removable
+  // (no per-candidate delete endpoint exists — confirmed against
+  // python-plexapi) so it's left in the item's candidate list as
+  // harmless clutter, same as any real upload would leave.
+  describe.sequential(
+    "poster round trip (list / upload / set / restore)",
+    () => {
+      let originalSelectedPosterKey: string | undefined;
+      let uploadedPosterKey: string | undefined;
+
+      beforeAll(async () => {
+        const posters = (await client.listPosters(
+          fixtures.showRatingKey,
+        )) as Array<{ ratingKey?: string; selected?: boolean }>;
+        originalSelectedPosterKey = posters.find((p) => p.selected)?.ratingKey;
+      });
+
+      afterAll(async () => {
+        if (!originalSelectedPosterKey) return;
+        try {
+          await client.setPoster(
+            fixtures.showRatingKey,
+            originalSelectedPosterKey,
+          );
+        } catch {
+          // best-effort; not worth failing afterAll
+        }
+      });
+
+      it("listPosters returns an array with a currently-selected candidate", async () => {
+        const posters = (await client.listPosters(
+          fixtures.showRatingKey,
+        )) as Array<{ selected?: boolean }>;
+        expect(Array.isArray(posters)).toBe(true);
+        expect(posters.some((p) => p.selected)).toBe(true);
+      });
+
+      it("uploadPoster with select=false adds a candidate without changing the active poster", async () => {
+        if (!originalSelectedPosterKey) {
+          console.warn(
+            "[skip] fixture has no currently-selected poster; upload round-trip not exercised",
+          );
+          return;
+        }
+        const result = await client.uploadPoster({
+          ratingKey: fixtures.showRatingKey,
+          url: TEST_POSTER_URL,
+          select: false,
+        });
+        expect(result.posterRatingKey).toBeTruthy();
+        expect(result.selected).toBe(false);
+        uploadedPosterKey = result.posterRatingKey;
+
+        // Confirmed live (2026-08-03): Plex auto-selects every freshly
+        // uploaded poster server-side — select=false works by restoring
+        // the previous selection afterward, not by skipping the select.
+        // getItem's thumb URL isn't a reliable "unchanged" signal —
+        // Plex bumps its version/cache-busting suffix on any select
+        // call, even a no-op reselection of the same candidate (same
+        // family of quirk as the documented lastViewedAt-bump-on-
+        // scrobble in this file's header comment). The real invariant
+        // is which candidate is selected, not the thumb URL's bytes.
+        const postersAfter = (await client.listPosters(
+          fixtures.showRatingKey,
+        )) as Array<{ ratingKey?: string; selected?: boolean }>;
+        expect(postersAfter.find((p) => p.selected)?.ratingKey).toBe(
+          originalSelectedPosterKey,
+        );
+        expect(
+          postersAfter.some((p) => p.ratingKey === uploadedPosterKey),
+        ).toBe(true);
+      });
+
+      it("setPoster switches the active poster to the uploaded candidate", async () => {
+        if (!uploadedPosterKey) {
+          console.warn(
+            "[skip] no uploaded candidate from the previous test; setPoster not exercised",
+          );
+          return;
+        }
+        await client.setPoster(fixtures.showRatingKey, uploadedPosterKey);
+        const posters = (await client.listPosters(
+          fixtures.showRatingKey,
+        )) as Array<{ ratingKey?: string; selected?: boolean }>;
+        expect(posters.find((p) => p.selected)?.ratingKey).toBe(
+          uploadedPosterKey,
+        );
+      });
+
+      it("restores the original poster selection", async () => {
+        if (!originalSelectedPosterKey) return;
+        await client.setPoster(
+          fixtures.showRatingKey,
+          originalSelectedPosterKey,
+        );
+        const posters = (await client.listPosters(
+          fixtures.showRatingKey,
+        )) as Array<{ ratingKey?: string; selected?: boolean }>;
+        expect(posters.find((p) => p.selected)?.ratingKey).toBe(
+          originalSelectedPosterKey,
+        );
+      });
+    },
+  );
 
   // .sequential because we don't want parallel mutations on the
   // same item across other (hypothetical future) write tests.

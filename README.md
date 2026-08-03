@@ -48,6 +48,9 @@ your Plex libraries.
 | `plex_get_image` | Fetch poster/art/banner/clearLogo bytes for an item as an MCP image content block (so vision-capable clients can actually see the picture); optional max_width/max_height routes through Plex's transcoder |
 | `plex_save_image` | Same input surface as `plex_get_image`, but WRITES the bytes to disk under `MCP_IMAGE_SAVE_DIR` (default `/data/images/`) and returns the path + size. Bind-mount a host directory onto that path to bridge to a downstream pipeline (ImageMagick, filesystem-mcp consumer, etc.) without a vision render. |
 | `plex_download_logs` | Fetch the Plex Media Server's own diagnostic log bundle (a ZIP) and write it to disk under `MCP_LOG_SAVE_DIR` (default `/data/logs/`) |
+| `plex_list_posters` | List every poster candidate for an item (agent-supplied, locally-scanned, previously uploaded), including which one is currently active |
+| `plex_set_poster` | Select an existing poster candidate as the active one, by the candidate's own `poster_rating_key` from `plex_list_posters` |
+| `plex_upload_poster` | Add a new poster from an external URL (Plex fetches it) or a local file under `MCP_IMAGE_SAVE_DIR`. Auto-selects it by default; `select=false` adds it without changing what's displayed |
 
 ## Configuration
 

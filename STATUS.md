@@ -1,22 +1,19 @@
 # Status
 
-**Last updated:** 2026-08-03 (Collections support shipped —
-`plex_list_collections`, `plex_hub_search`, `plex_browse`'s `collection`
-filter, all verified against the live server; subtitle discovery shipped
-via `plex_get_item` minimal mode, content fetch explicitly declined
-(no endpoint evidence in python-plexapi); `plex_download_logs` shipped —
-`GET /diagnostics/logs` ZIP bundle download, verified live. Fleet
-standards-audit issue #8 closed earlier this session — MCP-S01
-(`src/config.ts`), MCP-F01/F02 (fetch timeout + bounded retry),
-MCP-P04/P05 (viewer-IP redaction + log verbosity), MCP-P06
-(destructive-tool name confirmation), MCP-F03 (HTTP transport
-hardening, verified live), UNI-16 closed as a non-issue. Phase-end
-audit run after that batch — doc drift fixed, 3 duplication findings
+**Last updated:** 2026-08-03 (Big single-day session. Fleet
+standards-audit issue #8 closed (MCP-S01/F01/F02/P04/P05/P06/F03,
+UNI-16 non-issue). Shipped collections support, subtitle discovery,
+and `plex_download_logs`, all verified against the live server. Ran a
+phase-end audit on that batch: doc drift fixed, 4 duplication findings
 deduped, a real non-positive-timeout bug fixed, and the long-standing
-`unmatch`/`applyMatch` test flake finally root-caused and fixed
-(the guard was broken, which had left a real library item unmatched
-in production — repaired live). Suite is 117/117 green for the first
-time since the flake was first noted 2026-07-29. See "Done" below.)
+`unmatch`/`applyMatch` test flake finally root-caused, fixed, and its
+real-world damage (a production library item left unmatched) repaired
+live. Then shipped poster management (`plex_list_posters`/
+`plex_set_poster`/`plex_upload_poster`), correcting a stale
+speculative design after researching python-plexapi's real source —
+upload and select turned out to be separate operations, and live
+testing found Plex auto-selects uploads server-side regardless. Suite
+is 121/121 green. See "Done" below.)
 
 ## Phase
 
@@ -750,23 +747,58 @@ downloader-mcp.
     fully-green run of this suite since the flake was first noted
     2026-07-29.
 
-## Next
+- **Poster management shipped (2026-08-03)** — `plex_list_posters`,
+  `plex_set_poster`, `plex_upload_poster`. Closes the write-side gap
+  for artwork; motivated by a poster-design handoff needing the
+  round trip completed.
+  - **Corrected a stale speculative design.** This item's original
+    2026-05-11 notes assumed a single upload call with a `select`
+    flag baked in. Researched python-plexapi's real source
+    (`plexapi/mixins/resources.py`'s `PosterMixin`) before writing
+    any code, per this repo's standing discipline — upload and
+    select are two fully separate operations there; `uploadPoster()`
+    never calls `setPoster()` internally.
+  - **`plex_list_posters`** — `GET /library/metadata/{rk}/posters`.
+    Each candidate: `{key, ratingKey, thumb, selected, provider?}`;
+    `ratingKey` is the *candidate's own* id (e.g.
+    `upload://posters/<hash>`), not the item's.
+  - **`plex_set_poster`** — `PUT /library/metadata/{rk}/poster`
+    (**singular** — distinct from the plural list/upload endpoint)
+    `?url=<candidate ratingKey>`. Confirmed against
+    `BaseResource.select()` (`plexapi/media.py`).
+  - **`plex_upload_poster`** — `POST /library/metadata/{rk}/posters`,
+    either `url=<external>` (Plex fetches server-side) or a local
+    file under `MCP_IMAGE_SAVE_DIR` (the `plex_save_image` output
+    convention) POSTed as the raw body — closes the
+    `plex_save_image → local compositor → plex_upload_poster` loop.
+  - **Two behaviors confirmed live, not assumed from source**, via a
+    fully-reversible test against a real item ("Arcane"), reverted
+    afterward and independently re-verified: (1) the raw POST
+    response is always a 200 with an **empty body** — the new
+    candidate's identity has to come from a before/after diff of
+    `listPosters()`, not the response; (2) **Plex auto-selects every
+    freshly uploaded poster server-side** — zero PUT calls needed.
+    `select=false` (default `true`) works by capturing the
+    previously-selected candidate before uploading and restoring it
+    afterward, the opposite of what the stale design assumed.
+  - **Gotcha caught by the test suite itself**: the item's `thumb`
+    field bumps a version/cache-busting suffix on *any* select call
+    — even a no-op reselection of the same candidate (same family as
+    the documented `lastViewedAt`-bump-on-scrobble quirk). An initial
+    test asserting thumb-equality after a `select=false` upload
+    failed on exactly this; fixed to assert against
+    `listPosters()`'s `selected` flag instead, the real invariant.
+  - 4 new integration tests (list/upload-without-selecting/set/
+    restore), all against the live server. Full suite: 121/121
+    passing. Verified the final live state matches the pre-test
+    original via an independent curl check (not just the test's own
+    assertions).
+  - No per-candidate delete tool: Plex/python-plexapi only exposes
+    deleting whichever candidate is *currently selected*, not one
+    specific unselected candidate — documented in `docs/PLEX-API.md`
+    rather than worked around.
 
-- **`plex_upload_poster` (close-the-loop write side).** Elevated
-  from the v0.8 poster-management queue because today's poster
-  design handoff with Claude Desktop confirms the round-trip needs
-  an upload side. Plex API: `POST /library/metadata/{rk}/posters`
-  with either `url=<external>` (Plex fetches) or a binary body (we
-  POST the bytes ourselves). Plex stores as a new candidate and
-  optionally makes it active. For the file-pipeline case (poster
-  saved at `/data/images/foo.jpg` by plex_save_image, processed by
-  a local compositor, ready to push back), the binary-body path is
-  natural — read the file inside the container, POST to Plex,
-  return the updated `selected` poster reference.
-  Cross-validate against python-plexapi's `mixins/poster.py` for
-  exact endpoint + headers before shipping. Annotations:
-  `SAFE_WRITE_ANNOTATIONS` (mutating; not idempotent — each call
-  creates a new candidate).
+## Next
 
 - **ChatGPT Apps SDK alignment — Phase 1 done, Phases 2–4 not
   started.** See [docs/CHATGPT-APPS-SDK.md](docs/CHATGPT-APPS-SDK.md)
@@ -865,44 +897,20 @@ downloader-mcp.
      are locked** (`title`, `titleSort`, `thumb`, etc.). This is
      useful for tooling but undocumented in PLEX-API.md. Worth
      a one-liner.
-- **v0.8 candidates: poster / image management.** User reports that
-  Plex's auto-picked posters are often awful — sometimes the bound
-  agent (TMDB/TVDB) has better candidates already, sometimes the
-  agent's whole set is poor and a custom URL would fix it. Plex's
-  HTTP API exposes the lifecycle but plex-mcp doesn't surface it yet.
-  Layer 1 (in this repo, ~150 lines + tests):
-    - `plex_list_posters(rating_key)` — `GET /library/metadata/{rk}/posters`.
-      Returns candidate list per provider with `selected` flag.
-    - `plex_set_poster(rating_key, provider, key)` — apply an
-      existing candidate from the agent's catalog.
-    - `plex_upload_poster(rating_key, url, select?: bool=true)` —
-      `POST .../posters?url=...`. Plex fetches the image and adds it
-      as a new candidate; by default makes it the active poster.
-  Cross-validate the endpoint shapes against python-plexapi's
-  `mixins/poster.py` per the existing PLEX-API.md cross-validation
-  pattern. Parallel endpoints `arts` and `themes` exist with the
-  same shape — defer those until Layer 1 proves the pattern.
-  Open design questions to settle before code:
-  - Three named tools (list/set/upload) vs one unified
-    `plex_image_action(kind=posters|arts|themes, action=...)`.
-    Leaning three named tools for discoverability; add arts/themes
-    later if the pattern is useful.
-  - Upload-by-URL only, or also accept local file paths via
-    filesystem-mcp's reach? URL-only is simpler (no multipart, no
-    upload bandwidth through plex-mcp). File path adds meaningful
-    complexity for a small win unless the user has images on the
-    NAS to push.
-  - `select` semantics on upload: default true (new poster becomes
-    active), with `select=false` opt-out for add-without-applying
-    review workflows.
-  Layer 2 is a separate, future MCP that fetches better posters
-  from external catalogs (Mediux, ThePosterDB, Fanart.tv, TMDB
-  images API) and feeds URLs into `plex_upload_poster`. Don't
-  start until Layer 1 ships and we see how often external sourcing
-  is actually needed vs. picking a better existing candidate.
-  Kometa already handles bulk poster-overlay-config at scale —
-  this is for the drive-by "this one specific item's poster looks
-  bad, swap it" workflow that Kometa is wrong for.
+- ~~v0.8 candidates: poster / image management (Layer 1).~~ —
+  **shipped 2026-08-03** as `plex_list_posters`/`plex_set_poster`/
+  `plex_upload_poster` (see Done below). The open design questions
+  below were settled during that work: three named tools (not a
+  unified `plex_image_action`); both URL and local-file upload
+  (not URL-only); `select` defaults `true` with a `select=false`
+  opt-out. **Layer 2** (a separate future MCP sourcing posters from
+  external catalogs — Mediux, ThePosterDB, Fanart.tv, TMDB images
+  API — and feeding URLs into `plex_upload_poster`) remains
+  unstarted; still worth deferring until real usage shows how often
+  external sourcing is needed vs. picking a better existing
+  candidate. `arts`/`themes` (parallel endpoints to posters, same
+  shape) also remain unshipped — revisit if the poster pattern
+  proves useful enough to extend.
 
 - **Cross-MCP observations (not plex-mcp's repo, but adjacent).**
   - `servarr-mcp.sonarr_list_series` has no search-by-title.

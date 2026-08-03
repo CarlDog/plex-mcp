@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./log.js";
 
@@ -288,6 +288,7 @@ export class PlexClient {
     params: Record<string, string>,
     headers: Record<string, string>,
     method: "GET" | "POST" | "PUT" | "DELETE",
+    body?: Buffer,
   ): Promise<Response> {
     const url = new URL(path, this.config.url);
     for (const [k, v] of Object.entries(params)) {
@@ -300,6 +301,7 @@ export class PlexClient {
       res = await this.fetchWithTimeoutAndRetry(url, {
         method,
         headers: { "X-Plex-Token": this.config.token, ...headers },
+        ...(body ? { body: body as BodyInit } : {}),
       });
     } catch (err) {
       log.error("plex", "network error", {
@@ -355,8 +357,9 @@ export class PlexClient {
     path: string,
     params: Record<string, string> = {},
     method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
+    body?: Buffer,
   ): Promise<void> {
-    await this.sendRequest(path, params, {}, method);
+    await this.sendRequest(path, params, {}, method, body);
   }
 
   async hubs(): Promise<unknown[]> {
@@ -954,6 +957,147 @@ export class PlexClient {
       path: savePath,
       bytes_written: buffer.byteLength,
       mime_type: mimeType,
+    };
+  }
+
+  /**
+   * List every poster candidate Plex knows about for an item —
+   * agent-supplied (TMDB/TVDB), locally-scanned, and previously
+   * uploaded — including which one is currently active. Each entry's
+   * shape is `{key, ratingKey, thumb, selected, provider?}`; `ratingKey`
+   * here is the *candidate's* own identifier (e.g.
+   * "upload://posters/<hash>" or an external image URL), not the
+   * item's. Confirmed against a live capture (2026-08-03) and
+   * python-plexapi's PosterMixin.posters() (plexapi/mixins/resources.py).
+   */
+  async listPosters(ratingKey: string): Promise<unknown[]> {
+    const data = await this.request<{ Metadata?: unknown[] }>(
+      `/library/metadata/${ratingKey}/posters`,
+    );
+    return data.MediaContainer?.Metadata ?? [];
+  }
+
+  /**
+   * Select an existing poster candidate as the active poster.
+   *
+   * `PUT /library/metadata/{ratingKey}/poster` (the *singular*
+   * "poster" endpoint — distinct from the plural "posters" list/
+   * upload endpoint) `?url={posterRatingKey}`. `posterRatingKey` is a
+   * candidate's own `ratingKey` from `listPosters()`, not the item's.
+   * Confirmed against python-plexapi's `BaseResource.select()`
+   * (plexapi/media.py) and live (2026-08-03): select, verify via
+   * `getItem`'s `thumb` field, then revert — all round-tripped clean.
+   */
+  async setPoster(ratingKey: string, posterRatingKey: string): Promise<void> {
+    await this.requestNoContent(
+      `/library/metadata/${ratingKey}/poster`,
+      { url: posterRatingKey },
+      "PUT",
+    );
+  }
+
+  /**
+   * Add a new poster candidate from an external URL (Plex fetches it
+   * server-side) or a local file already on disk under
+   * `MCP_IMAGE_SAVE_DIR` (the `saveImage` output convention) — exactly
+   * one of `url`/`filename`. `POST /library/metadata/{ratingKey}/posters`,
+   * confirmed against python-plexapi's `PosterMixin.uploadPoster()`:
+   * `url` as a query param, or the raw file bytes as the request body,
+   * never both.
+   *
+   * Two things confirmed live (2026-08-03) that aren't obvious from
+   * python-plexapi's source alone:
+   * - The raw POST response is always a 200 with an **empty body**, so
+   *   the newly added candidate's identity has to come from a
+   *   before/after diff of `listPosters()`, not the upload response.
+   * - **Plex auto-selects every freshly uploaded poster server-side.**
+   *   python-plexapi's separate `setPoster()`/`select()` call is for
+   *   switching between already-existing candidates, not required
+   *   after an upload — confirmed by uploading via `url=`, observing
+   *   `selected: true` on the new candidate with zero PUT calls made,
+   *   and the item's `thumb` field changing to match.
+   *
+   * `select` (default `true`) trades on that: `false` restores
+   * whichever candidate was selected *before* the upload, so the new
+   * one is added without changing what's currently displayed — for
+   * review-before-applying workflows. Not idempotent: each call adds a
+   * new candidate regardless of `select`.
+   */
+  async uploadPoster(args: {
+    ratingKey: string;
+    url?: string;
+    filename?: string;
+    select?: boolean;
+  }): Promise<{ posterRatingKey: string; thumb: string; selected: boolean }> {
+    if (!args.url && !args.filename) {
+      throw new Error("uploadPoster: either url or filename must be provided");
+    }
+    if (args.url && args.filename) {
+      throw new Error(
+        "uploadPoster: only one of url or filename may be provided",
+      );
+    }
+    const select = args.select ?? true;
+
+    type PosterEntry = {
+      ratingKey?: string;
+      thumb?: string;
+      selected?: boolean;
+    };
+    const before = (await this.listPosters(args.ratingKey)) as PosterEntry[];
+    const beforeKeys = new Set(before.map((p) => p.ratingKey));
+    const previousSelected = before.find((p) => p.selected);
+
+    if (args.url) {
+      await this.requestNoContent(
+        `/library/metadata/${args.ratingKey}/posters`,
+        { url: args.url },
+        "POST",
+      );
+    } else {
+      assertSafeBasename(args.filename!, "uploadPoster");
+      const baseDir = process.env.MCP_IMAGE_SAVE_DIR ?? "/data/images";
+      const filePath = join(baseDir, args.filename!);
+      let bytes: Buffer;
+      try {
+        bytes = readFileSync(filePath);
+      } catch (err) {
+        throw new Error(
+          `uploadPoster: could not read ${filePath}: ${(err as Error).message}`,
+          { cause: err },
+        );
+      }
+      await this.requestNoContent(
+        `/library/metadata/${args.ratingKey}/posters`,
+        {},
+        "POST",
+        bytes,
+      );
+    }
+
+    // Plex auto-selects the new candidate regardless of `select` — see
+    // the doc comment above. If Plex deduped an identical URL instead
+    // of adding a literal new entry, fall back to whatever's currently
+    // selected rather than assuming a diff always finds something new.
+    const after = (await this.listPosters(args.ratingKey)) as PosterEntry[];
+    const fresh = after.find(
+      (p) => p.ratingKey && !beforeKeys.has(p.ratingKey),
+    );
+    const current = fresh ?? after.find((p) => p.selected);
+    if (!current?.ratingKey) {
+      throw new Error(
+        "uploadPoster: could not identify the newly added poster candidate after upload",
+      );
+    }
+
+    if (!select && previousSelected?.ratingKey) {
+      await this.setPoster(args.ratingKey, previousSelected.ratingKey);
+    }
+
+    return {
+      posterRatingKey: current.ratingKey,
+      thumb: current.thumb ?? "",
+      selected: select,
     };
   }
 

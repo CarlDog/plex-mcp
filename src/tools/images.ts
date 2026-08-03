@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { PlexClient } from "../plex.js";
 import {
   READ_ONLY_ANNOTATIONS,
+  SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
   SAFE_WRITE_ANNOTATIONS,
   asImage,
   asText,
@@ -139,6 +140,102 @@ export function registerImageTools(server: McpServer, plex: PlexClient): void {
           imageType: image_type,
           maxWidth: max_width,
           maxHeight: max_height,
+        });
+        return asText(result);
+      },
+    ),
+  );
+
+  server.registerTool(
+    "plex_list_posters",
+    {
+      title: "List Plex Item Poster Candidates",
+      description:
+        "List every poster candidate Plex knows about for an item — agent-supplied (TMDB/TVDB), locally-scanned, and previously uploaded — including which one is currently active. Use before plex_set_poster to find a poster_rating_key, or to review what plex_upload_poster added.",
+      inputSchema: {
+        rating_key: z.string().describe("Plex rating key of the item."),
+      },
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    withLogging("plex_list_posters", async ({ rating_key }) => {
+      const posters = await plex.listPosters(rating_key);
+      return asText(posters);
+    }),
+  );
+
+  server.registerTool(
+    "plex_set_poster",
+    {
+      title: "Select an Existing Plex Poster Candidate",
+      description:
+        "Make an existing poster candidate the active one for an item. Pass poster_rating_key from a prior plex_list_posters call (or plex_upload_poster's response) — this is the CANDIDATE's own identifier (e.g. 'upload://posters/<hash>' or an external image URL), not the item's rating_key. Reversible: call again with a different candidate's poster_rating_key to switch back.",
+      inputSchema: {
+        rating_key: z.string().describe("Plex rating key of the item."),
+        poster_rating_key: z
+          .string()
+          .min(1)
+          .describe(
+            "The candidate poster's own ratingKey from plex_list_posters. Not the item's rating_key.",
+          ),
+      },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
+    },
+    withLogging(
+      "plex_set_poster",
+      async ({ rating_key, poster_rating_key }) => {
+        await plex.setPoster(rating_key, poster_rating_key);
+        return asText({ rating_key, selected: poster_rating_key });
+      },
+    ),
+  );
+
+  server.registerTool(
+    "plex_upload_poster",
+    {
+      title: "Upload a New Plex Poster",
+      description:
+        "Add a new poster candidate for an item, either from an external URL (Plex fetches it server-side) or a local file already saved under MCP_IMAGE_SAVE_DIR (e.g. by plex_save_image or a local compositor) — exactly one of url or filename must be set. Plex auto-selects a freshly uploaded poster by default (select=true), immediately changing what's displayed; pass select=false to add it as a candidate without changing the current poster (useful for review-before-applying workflows) — the previously active poster is restored after upload. Not idempotent: each call adds a new candidate.",
+      inputSchema: {
+        rating_key: z.string().describe("Plex rating key of the item."),
+        url: z
+          .string()
+          .optional()
+          .describe(
+            "External URL for Plex to fetch server-side as the new poster. Either url or filename must be set.",
+          ),
+        filename: z
+          .string()
+          .optional()
+          .describe(
+            "Basename of a file already on disk under MCP_IMAGE_SAVE_DIR to upload as the new poster. Either url or filename must be set.",
+          ),
+        select: z
+          .boolean()
+          .optional()
+          .describe(
+            "Whether to make the uploaded poster active immediately. Default true.",
+          ),
+      },
+      annotations: SAFE_WRITE_ANNOTATIONS,
+    },
+    withLogging(
+      "plex_upload_poster",
+      async ({ rating_key, url, filename, select }) => {
+        if (!url && !filename) {
+          throw new Error(
+            "plex_upload_poster: either url or filename must be provided",
+          );
+        }
+        if (url && filename) {
+          throw new Error(
+            "plex_upload_poster: only one of url or filename may be provided",
+          );
+        }
+        const result = await plex.uploadPoster({
+          ratingKey: rating_key,
+          url,
+          filename,
+          select,
         });
         return asText(result);
       },

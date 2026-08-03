@@ -54,6 +54,17 @@ the work rather than after the fact.
   `plex_save_image`. New `MCP_LOG_MAX_BYTES` (default 50 MiB) and
   `MCP_LOG_FETCH_TIMEOUT_MS` (default 2 min) env vars — a log bundle has
   a different size/latency profile than an image.
+- `plex_list_posters`, `plex_set_poster`, `plex_upload_poster` — poster
+  management, closing the write-side gap for artwork. Upload accepts
+  either an external URL (Plex fetches server-side) or a local file
+  under `MCP_IMAGE_SAVE_DIR` (the `plex_save_image` output convention),
+  and auto-selects the new poster by default (`select=false` adds it
+  without changing what's displayed, by restoring the previous
+  selection afterward). Corrects an earlier speculative design
+  (STATUS.md, 2026-05-11) that assumed upload and select were one call
+  with a `select` flag — the real python-plexapi source shows them as
+  separate operations, and live testing confirmed Plex auto-selects
+  every freshly uploaded poster server-side regardless.
 
 ### Changed
 

@@ -232,6 +232,9 @@ user explicitly asks otherwise. The Plex API doesn't expose a
 | `plex_merge_items`     | `PUT /library/metadata/{key}/merge?ids=<csv>`                         | Empty 200 — sources absorbed into target; target's rk/GUID survive    |
 | `plex_get_image`       | `GET {item.thumb/art/banner}` or `GET /photo/:/transcode?url=…&width=&height=` | Returns binary; Accept: image/\* (not JSON). Transcode needs BOTH width AND height — see gotcha above. 4 MiB raw cap. |
 | `plex_save_image`      | Same fetch path as `plex_get_image`                                    | Writes bytes to `${MCP_IMAGE_SAVE_DIR}/${filename}` inside the container instead of returning them. Default save dir `/data/images/`. |
+| `plex_list_posters`    | `GET /library/metadata/{key}/posters`                                  | Returns `MediaContainer.Metadata[]` candidates, each `{key, ratingKey, thumb, selected, provider?}` |
+| `plex_set_poster`      | `PUT /library/metadata/{key}/poster?url=<candidate ratingKey>`         | Empty 200 — note the *singular* `poster`, distinct from the plural list/upload endpoint |
+| `plex_upload_poster`   | `POST /library/metadata/{key}/posters?url=<external url>` or same path with raw bytes as body | Empty 200 — Plex auto-selects the new candidate server-side; see below |
 
 All requests carry `X-Plex-Token: <token>` as an HTTP header
 (`PlexClient.request`); never put the token in the URL query string.
@@ -261,8 +264,9 @@ Built since the table above was last swept: collections support
 (`plex_list_collections`, `plex_hub_search`, `plex_browse`'s `collection`
 filter — 2026-08-03), subtitle *discovery* (`plex_get_item`'s minimal
 mode now keeps subtitle-track `Stream[]` entries — 2026-08-03, see
-below), and server log retrieval (`plex_download_logs` — 2026-08-03,
-see below).
+below), server log retrieval (`plex_download_logs` — 2026-08-03, see
+below), and poster management (`plex_list_posters`, `plex_set_poster`,
+`plex_upload_poster` — 2026-08-03, see below).
 
 ### Subtitle discovery — done; content fetch — declined (2026-08-03)
 
@@ -349,6 +353,83 @@ rather than the operator manually pulling logs via the web UI (Settings
   the whole bundle and greps the relevant file(s) themselves (or via a
   follow-up filesystem-mcp read) rather than a server-side filter this
   endpoint doesn't support.
+
+### Poster management ✓ pkkid — shipped 2026-08-03
+
+Motivated by closing the loop on a poster-design workflow: Plex's
+auto-picked posters are often bad (a mediocre agent candidate, or a
+custom composited poster from an external pipeline needs pushing
+back in) and until now plex-mcp had no write side for artwork at all.
+
+- **Corrects an earlier speculative note.** STATUS.md's original
+  design (captured 2026-05-11, before this repo's "verify against a
+  real captured response" discipline was as strict as it is now)
+  assumed a single `POST .../posters?url=&select=` call with a
+  `select` flag baked into the upload itself. The real
+  python-plexapi source (`plexapi/mixins/resources.py`'s
+  `PosterMixin`) shows upload and select as two fully separate
+  operations — `uploadPoster()` never calls `setPoster()`/`select()`
+  internally.
+- **`plex_list_posters`** — `GET /library/metadata/{key}/posters`,
+  confirmed against `PosterMixin.posters()`. Each candidate:
+  `{key, ratingKey, thumb, selected, provider?}` — `ratingKey` here
+  is the *candidate's own* identifier (e.g.
+  `upload://posters/<hash>` for a previously uploaded poster, or the
+  literal external image URL for an agent-fetched one), not the
+  item's. `provider` is present for agent-supplied candidates
+  (`tmdb`, etc.) and absent for uploaded ones — matches
+  `BaseResource`'s docstring ("`None` if uploaded or agent-/
+  plugin-supplied", confirmed live: an uploaded candidate had no
+  `provider` key at all).
+- **`plex_set_poster`** — `PUT /library/metadata/{key}/poster?url=
+  <candidate ratingKey>`. Note the **singular** `poster` in the path
+  — the plural `posters` is the list/upload collection endpoint,
+  this is the per-item "select" endpoint. Confirmed against
+  `BaseResource.select()` (`plexapi/media.py`): it builds this exact
+  URL from `self._initpath[:-1]` (stripping the trailing "s") plus
+  `?url={quote_plus(self.ratingKey)}`.
+- **`plex_upload_poster`** — `POST /library/metadata/{key}/posters`
+  with either `url=<external>` as a query param (Plex fetches
+  server-side) or the raw image bytes as the request body — never
+  both, confirmed against `PosterMixin.uploadPoster(url=None,
+  filepath=None)`. plex-mcp's `filename` mode reads from
+  `MCP_IMAGE_SAVE_DIR` (the `plex_save_image` output convention),
+  closing the `plex_save_image → local compositor → plex_upload_poster`
+  round trip this item was originally motivated by.
+- **Two things confirmed live (2026-08-03) that aren't obvious from
+  the python-plexapi source alone, both discovered by testing
+  against a real library item (the "Arcane" show) and fully
+  reverting afterward:**
+  1. **The raw POST response is always a 200 with an empty body**
+     (`Content-Length: 0`) — matches python-plexapi's own
+     `uploadPoster()` never reading the response. The newly added
+     candidate's identity has to come from a before/after diff of
+     `plex_list_posters`, not the upload response.
+  2. **Plex auto-selects every freshly uploaded poster server-side.**
+     Uploading via `url=` with zero follow-up `PUT` calls produced a
+     new candidate with `selected: true` immediately, and the item's
+     `thumb` field changed to match. `setPoster()`/`select()` is for
+     switching between *already-existing* candidates, not something
+     upload needs afterward. `plex_upload_poster`'s `select=false`
+     (default `true`) works by capturing the previously-selected
+     candidate before uploading and restoring it afterward — the
+     opposite of what the pre-research design assumed.
+- **Gotcha for anyone testing this further:** the item's `thumb`
+  field is not a stable "did the poster change" signal — Plex bumps
+  a version/cache-busting suffix on the `thumb` URL on *any* select
+  call, even a no-op reselection of the same candidate (confirmed by
+  the round-trip test in `tests/plex.test.ts` initially asserting
+  thumb-equality and failing on the version-number tail). Same
+  family of quirk as `/:/scrobble` bumping `lastViewedAt` on every
+  call (see above) — check `plex_list_posters`' `selected` flag
+  against the candidate's `ratingKey`, not the `thumb` URL's bytes.
+- **No per-candidate delete exists.** Only `DELETE
+  /library/metadata/{key}/thumb` (deletes whichever candidate is
+  *currently selected*) is exposed by python-plexapi
+  (`deletePoster()`) — there's no endpoint to remove one specific
+  unselected candidate from the list. Not implemented as a plex-mcp
+  tool; a test-uploaded candidate that's never selected just sits in
+  the list as harmless clutter, same as it would for a real caller.
 
 **Out of scope** (per scoping decision in v0.2): `DELETE /library/metadata/{key}`,
 `DELETE /library/sections/{id}`, and any other operation that destroys
