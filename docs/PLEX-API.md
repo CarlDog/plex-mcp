@@ -258,6 +258,7 @@ below). Shapes without ✓ are speculative.
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |
 | Currently transcoding sessions          | `GET /transcode/sessions`                                                                | Low                      |
 | Subtitle track discovery + content      | See below                                                                                 | Low (discovery) / Unresearched (content) |
+| Server log retrieval                    | See below                                                                                 | Unresearched              |
 
 ### Subtitle track discovery + content (idea, not designed — 2026-08-02)
 
@@ -295,6 +296,35 @@ into later episodes).
   (needs an active session tracker polling `plex_now_playing` against
   subtitle timestamps — a different shape of feature entirely, out of scope
   for a single tool).
+
+### Server log retrieval (idea, not designed — 2026-08-03)
+
+Motivated by wanting an LLM assistant to help troubleshoot Plex issues
+directly — "why did last night's recording fail," "why does this file
+keep failing to scan," "was there an error during that refresh" —
+rather than the operator manually pulling logs via the web UI (Settings
+→ Help → "Download Logs", which produces a ZIP bundle of PMS's log
+files) and pasting excerpts into a session by hand.
+
+- **Endpoint shape is entirely unresearched** — no capture done, no
+  pkkid cross-check yet. The web UI's "Download Logs" flow is a known
+  starting point to trace (likely an authenticated diagnostics/support
+  endpoint returning a ZIP, not a single plain-text log), but nothing
+  here should be treated as confirmed until verified against a real
+  request the way every other capability in this doc is.
+- **Shape questions to resolve before designing a tool:** is the
+  response a ZIP (needs unpacking + picking the relevant log file) or
+  discrete per-component log streams (PMS, scanner, DLNA, etc.)? Is
+  there a way to filter/tail rather than pulling the whole bundle every
+  time — log files on a long-running server could be large. Does it
+  require a different auth path than the `X-Plex-Token` header already
+  used everywhere else (the web UI's download flow may go through
+  plex.tv rather than the local PMS API directly).
+- **Likely token-economy concern** — same class of problem this repo's
+  already hit with `plex_get_item`/`plex_browse` (full payload blowing
+  the response cap). Raw PMS logs are verbose; a useful tool probably
+  needs either a `since`/`tail` parameter or server-side filtering by
+  component/severity, not a raw dump.
 
 **Out of scope** (per scoping decision in v0.2): `DELETE /library/metadata/{key}`,
 `DELETE /library/sections/{id}`, and any other operation that destroys
