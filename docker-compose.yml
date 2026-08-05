@@ -69,17 +69,24 @@ services:
       # the host — set it to /volume1/Media/_mcp-scratch to match
       # filesystem-mcp's exposed /media/_mcp-scratch, closing the loop
       # for the plex_search → plex_save_image → filesystem-mcp
-      # pipeline. Default below is relative, for local testing.
-      # Override the in-container path with MCP_IMAGE_SAVE_DIR if
-      # you want it elsewhere.
-      - ${HOST_IMAGE_DIR:-./data/images}:/data/images
+      # pipeline. Required, absolute path only — a relative default
+      # here resolves inside whatever directory Portainer cloned the
+      # git stack into for that redeploy, which doesn't exist next
+      # time; Docker then refuses the bind mount and the container is
+      # stuck in `created` forever. Took the deployed stack down ~10h
+      # on 2026-07-31 (see docker-deployments.md rule #10 and fleet
+      # lesson 2026-07-31-relative-compose-volume-defaults-break-
+      # portainer-git-stacks). Override the in-container path with
+      # MCP_IMAGE_SAVE_DIR if you want it elsewhere.
+      - "${HOST_IMAGE_DIR:?HOST_IMAGE_DIR must be set to an absolute host path, e.g. /volume1/Media/_mcp-scratch — a relative default breaks Portainer git-stack redeploys, see docker-deployments.md rule #10}:/data/images"
       # plex_download_logs output directory. Separate from
       # HOST_IMAGE_DIR above — a diagnostic log ZIP isn't a media
       # artifact, and keeping the two apart avoids mixing them in
       # one host directory or one filesystem-mcp-exposed path.
-      # Default below is relative, for local testing; override with
-      # MCP_LOG_SAVE_DIR if you want the in-container path elsewhere.
-      - ${HOST_LOG_DIR:-./data/logs}:/data/logs
+      # Required, absolute path only — same relative-default trap as
+      # HOST_IMAGE_DIR above. Override the in-container path with
+      # MCP_LOG_SAVE_DIR if you want it elsewhere.
+      - "${HOST_LOG_DIR:?HOST_LOG_DIR must be set to an absolute host path, e.g. /volume1/docker/plex-mcp/logs — a relative default breaks Portainer git-stack redeploys, see docker-deployments.md rule #10}:/data/logs"
       # Optional HTTPS cert volume (commented). Self-managed persists
       # across restarts; BYO is read-only.
       # - ./certs:/data/certs

@@ -1,6 +1,8 @@
 # Status
 
-**Last updated:** 2026-08-03 (Big single-day session — full detail in
+**Last updated:** 2026-08-05 (Hardened `HOST_IMAGE_DIR`/`HOST_LOG_DIR`
+to required, no-relative-default compose vars — see "Done" below.
+Previous entry, 2026-08-03: Big single-day session — full detail in
 "Done" below. Fleet standards-audit issue #8 closed. Shipped
 collections, subtitle discovery, `plex_download_logs`, then a
 phase-end audit (doc drift, 4 dedups, a real timeout bug, and the
@@ -854,6 +856,26 @@ downloader-mcp.
      nothing's locked, and every entry present has `locked: true` —
      confirms it's a sparse "what's locked" list, not a full
      per-field inventory with booleans either way.
+
+- **`HOST_IMAGE_DIR`/`HOST_LOG_DIR` hardened to required, no-relative-
+  default (2026-08-05).** Fleet lesson
+  `2026-07-31-relative-compose-volume-defaults-break-portainer-git-stacks`
+  (the same incident that took this deployed stack down ~10h on
+  2026-07-31) flagged that the fix at the time — documenting the vars
+  as "required" in README while the compose file still carried a soft
+  `${VAR:-./data/...}` default — left the actual trap in place for any
+  future clone or fresh deploy. `docker-compose.yml` now uses
+  `${VAR:?message}` for both, matching the syntax `MCP_ALLOWED_HOSTS`
+  already used; `docker compose config` fails fast with a clear message
+  if either is unset, instead of silently falling back to a relative
+  path that only breaks on the next Portainer git-stack redeploy.
+  Verified the live Portainer stack (id 145) already had both set to
+  absolute paths (`HOST_IMAGE_DIR=/volume1/Media/_mcp-scratch`,
+  `HOST_LOG_DIR=/volume1/docker/plex-mcp/logs`) before pushing, so no
+  pre-deploy sequencing was needed — confirmed via
+  `portainer_list_stacks`. README's Portainer section rewritten to
+  describe the hard requirement instead of a documentation-only
+  convention.
 
 ## Next
 

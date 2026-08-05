@@ -102,6 +102,15 @@ the work rather than after the fact.
   resolves inside the per-commit clone directory, Docker refuses the
   bind mount, and the container lands stuck in `created` without
   starting (took the deployed stack down ~10h on 2026-07-31).
+- **`docker-compose.yml`: `HOST_IMAGE_DIR`/`HOST_LOG_DIR` changed from
+  `${VAR:-./relative/default}` to `${VAR:?message}` (required, no
+  fallback).** Closes the gap left by the doc-only fix above — the
+  relative default was still live in compose, so a fresh clone or a
+  reset stack could still hit the same stuck-in-`created` failure.
+  `docker compose config` now fails fast with a clear message if
+  either is unset, matching `MCP_ALLOWED_HOSTS`'s existing required-var
+  syntax. README's Portainer section updated to describe the hard
+  requirement.
 
 ### Fixed
 

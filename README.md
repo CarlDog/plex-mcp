@@ -202,9 +202,8 @@ docker compose up
 2. Repository URL: `https://github.com/CarlDog/plex-mcp`
 3. Compose path: `docker-compose.yml`
 4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`,
-   `MCP_ALLOWED_HOSTS` (**required** — see below), `HOST_IMAGE_DIR`, and
-   `HOST_LOG_DIR` (**required** for git stacks — see below); optionally
-   `HOST_PORT`.
+   `MCP_ALLOWED_HOSTS`, `HOST_IMAGE_DIR`, and `HOST_LOG_DIR` — all
+   **required** (see below); optionally `HOST_PORT`.
 5. Deploy. Healthcheck reaches green within ~10 seconds.
 
 ### `MCP_ALLOWED_HOSTS` is required in HTTP mode
@@ -231,34 +230,44 @@ non-browser clients (the `mcp-remote` bridge, a direct `fetch`) never
 send an `Origin` header, so the empty default only ever rejects the
 request shape a DNS-rebinding attack actually sends.
 
-### `HOST_IMAGE_DIR` is required for git-stack deploys
+### `HOST_IMAGE_DIR` and `HOST_LOG_DIR` are required — no relative default
 
-The compose default for the `plex_save_image` output volume is the
-*relative* path `./data/images`. That works for a local
-`docker compose up` from a clone, but not in a Portainer git stack:
-every redeploy clones the repo into a fresh per-commit directory
-(`/data/compose/<stack-id>/<commit>/`), where `./data/images` doesn't
-exist. Docker refuses the bind mount and the container is left stuck
-in `created` state — it never starts. This also hits *automatic*
-redeploys (image update, git poll), so a previously healthy stack can
-go down with no manual action; the only symptom is the container
-sitting in `created`.
+Both volume host paths are `${VAR:?...}` in the compose file: **there
+is no fallback default**, so `docker compose up` / a Portainer
+redeploy fails fast with a clear error if either is unset, rather than
+starting in a broken state.
 
-Set `HOST_IMAGE_DIR` to an **absolute host path** in the stack's
-environment variables. Recommended: the host directory backing
-filesystem-mcp's `/media/_mcp-scratch` mount — e.g.
-`/volume1/Media/_mcp-scratch` on a Synology NAS — which keeps the
-`plex_search → plex_save_image → filesystem-mcp` pipeline on one
-shared directory.
+This used to be a soft `${VAR:-./data/images}` default, which is only
+safe for a local `docker compose up` from a stable clone. In a
+Portainer git stack it's a trap: every redeploy clones the repo into a
+fresh per-commit directory (`/data/compose/<stack-id>/<commit>/`),
+where a relative path like `./data/images` doesn't exist. Docker
+refused the bind mount and the container was left stuck in `created`
+state — it never started. That also hit *automatic* redeploys (image
+update, git poll), so a previously healthy stack went down with no
+manual action; the only symptom was the container sitting in
+`created`. This took the deployed stack down for ~10 hours on
+2026-07-31 — see `docker-deployments.md` rule #10 and fleet lesson
+`2026-07-31-relative-compose-volume-defaults-break-portainer-git-stacks`.
+The compose file now makes the requirement structural instead of a
+documentation-only convention.
 
-The same trap applies to `HOST_LOG_DIR` (the `plex_download_logs`
-output volume) — it defaults to the relative `./data/logs`, which
-fails identically on a git-stack deploy. Set it to an absolute host
-path too, e.g. `/volume1/docker/plex-mcp/logs` on a Synology NAS
-(matching this fleet's per-container appdata convention — see
-`docker-deployments.md` rule #10), and make sure the directory exists
-on the host **before** the first deploy: Docker does not auto-create a
-missing bind-mount source, it just refuses to start the container.
+Set both to **absolute host paths** in the stack's environment
+variables:
+
+- `HOST_IMAGE_DIR` — the `plex_save_image` output directory.
+  Recommended: the host directory backing filesystem-mcp's
+  `/media/_mcp-scratch` mount — e.g. `/volume1/Media/_mcp-scratch` on
+  a Synology NAS — which keeps the `plex_search → plex_save_image →
+  filesystem-mcp` pipeline on one shared directory.
+- `HOST_LOG_DIR` — the `plex_download_logs` output directory, kept
+  separate from `HOST_IMAGE_DIR` since a diagnostic ZIP isn't a media
+  artifact — e.g. `/volume1/docker/plex-mcp/logs` on a Synology NAS
+  (matching this fleet's per-container appdata convention).
+
+Make sure both directories exist on the host **before** the first
+deploy: Docker does not auto-create a missing bind-mount source, it
+just refuses to start the container.
 
 ## Use with Claude Desktop
 
