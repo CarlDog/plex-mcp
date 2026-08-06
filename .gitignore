@@ -40,3 +40,6 @@ coverage/
 
 # Claude Code local state (permission grants, runtime locks, worktrees)
 .claude/
+
+# Local agent state
+.serena/
