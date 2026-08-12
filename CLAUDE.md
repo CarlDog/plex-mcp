@@ -25,6 +25,11 @@ what's next.
 ## Layout
 
 - `src/index.ts` — MCP server entry. Decides transport based on `MCP_PORT`.
+- `src/mcp-route.ts` — the Streamable HTTP `/mcp` route: Host/Origin
+  allowlist, per-session transport map, idle sweep, session dispatch.
+  Split out of `index.ts` so it can be imported by a test — `index.ts`
+  self-executes on import, so nothing in it was reachable without booting
+  a server. Covered by `tests/mcp-route.test.ts`.
 - `src/plex.ts` — Plex HTTP API client.
 - `src/log.ts` — small structured logger (stderr, level-gated via
   `LOG_LEVEL` env var). See README for format and levels.
@@ -47,6 +52,11 @@ what's next.
 - `.gitleaks.toml` — secret-scanning config.
 
 ## When to add a `tools/` layer
+
+> **STALE — flagged 2026-08-12, see STATUS.md "Known Gaps".** This
+> section describes the `src/tools/` split as a future trigger, but the
+> split already happened; the Layout section above lists the real
+> structure. Read it as history, not as current guidance.
 
 Today the structure is flat: `src/plex.ts` holds the API client and
 `src/index.ts` registers tools inline (inside `createServer()`). That's

@@ -1111,3 +1111,36 @@ None active. Decisions made during scaffolding:
   a public-facing Plex (token-on-the-internet risk) or a
   self-hosted runner (separate setup task). Forks of this repo can
   wire up their own CI as they see fit.
+
+- **`tests/` is not typechecked by anything (found 2026-08-12).**
+  `npm run typecheck` is `tsc --noEmit` against `tsconfig.json`, whose
+  `include` is `["src/**/*"]` — so the entire `tests/` directory is
+  outside it, and vitest transpiles without typechecking. Test code is
+  the one part of this repo nothing type-checks. The fleet-canonical fix
+  is `tsconfig.typecheck.json` (standard MCP-D01, as in servarr-mcp and
+  now downloader-mcp), but adopting it here surfaces **4 pre-existing
+  `TS2532: Object is possibly 'undefined'` errors** in
+  `tests/plex.test.ts` (lines 529 ×2, 589, 607) — a consequence of
+  `noUncheckedIndexedAccess` never having been applied to these files.
+  Fix those four, then add the config; they're small but they are real
+  work, so this was left rather than half-done.
+  `tests/mcp-route.test.ts` was written clean under that config and
+  contributes no new errors.
+
+- **CLAUDE.md's "When to add a `tools/` layer" section is stale (found
+  2026-08-12).** It says "Today the structure is flat: `src/plex.ts`
+  holds the API client and `src/index.ts` registers tools inline" and
+  describes the split as a future trigger — but the split happened long
+  ago (the v0.2.5-era `src/tools/` refactor, recorded in "Done" above),
+  and the Layout section immediately above it correctly lists
+  `src/tools/`. The two sections contradict each other. Either rewrite
+  it as a record of the decision already taken or delete it; leaving it
+  reads as current guidance and will mislead.
+
+- **`brace-expansion` high-severity advisory (GHSA-rgw5-rvv9-x895, DoS
+  via unbounded intermediate arrays) reported by `npm audit`.** Dev-only
+  — it enters through the eslint chain, not runtime deps, so it does not
+  reach the shipped image. Present in downloader-mcp too, so treat it as
+  a fleet-wide dev-chain bump rather than a per-repo fix. Note this
+  supersedes the "npm audit now reports 0 vulnerabilities" claim in the
+  2026-07-29 dependency entry above — the advisory postdates it.
