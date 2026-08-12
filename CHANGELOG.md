@@ -114,6 +114,25 @@ the work rather than after the fact.
 
 ### Fixed
 
+- A session the server no longer knows now answers **HTTP 404, not 400**.
+  Idle sessions are evicted by design, but the Streamable HTTP spec
+  (2025-06-18, Session Management §3/§4) makes 404 the client's *only*
+  defined signal to start a new session by re-initializing. Returning 400
+  read as a generic protocol error, so a routine eviction presented to the
+  client as a dead connection until it was restarted by hand — observed live
+  on servarr-mcp, then found identically in six fleet servers.
+- `MCP_SESSION_IDLE_TIMEOUT_MS` is now actually present in
+  `docker-compose.yml`. `src/config.ts` read it all along, but it was absent
+  from the `environment:` block — so it read as configurable and silently
+  wasn't (`docker-deployments.md` §10). Now tunable from Portainer.
+- The `/mcp` request handler moved out of the self-executing `src/index.ts`
+  into `src/mcp-route.ts` (`mountMcpRoute`). `index.ts` starts a listener at
+  module scope, so nothing in it could be imported by a test without booting
+  a server — which is why the session-handling bug above had no regression
+  test here. Behaviour-preserving: same JSON-RPC error envelopes, same
+  auth-before-session ordering, same `MCP_ALLOWED_ORIGINS` handling and
+  refusal to start without `MCP_ALLOWED_HOSTS`. Covered by
+  `tests/mcp-route.test.ts`.
 - `MCP_FETCH_TIMEOUT_MS`/`MCP_LOG_FETCH_TIMEOUT_MS` (and the two byte-cap
   vars) previously only guarded against a non-numeric value — `"-1"`
   reached `AbortSignal.timeout(-1)` and threw a raw Node `RangeError`

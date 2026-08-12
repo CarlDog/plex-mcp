@@ -1,6 +1,18 @@
 # Status
 
-**Last updated:** 2026-08-05 (Hardened `HOST_IMAGE_DIR`/`HOST_LOG_DIR`
+**Last updated:** 2026-08-12 (Terminated MCP sessions now answer **HTTP
+404, not 400** — the Streamable HTTP spec, 2025-06-18 Session Management
+§3/§4, makes 404 the client's only defined signal to re-initialize after
+an idle session is evicted, so the old 400 turned a routine eviction into
+what the client reported as a dead connection. Fleet-wide fix; this repo
+hand-rolls its `/mcp` handler rather than using the canonical
+`http-transport.ts`, so the handler was extracted out of the
+self-executing `src/index.ts` into `src/mcp-route.ts` — which finally
+gives it a seam to test against, covered by `tests/mcp-route.test.ts`.
+Also added
+`MCP_SESSION_IDLE_TIMEOUT_MS` to `docker-compose.yml`, where it had been
+missing despite `src/config.ts` reading it.
+Previous entry, 2026-08-05: Hardened `HOST_IMAGE_DIR`/`HOST_LOG_DIR`
 to required, no-relative-default compose vars — see "Done" below.
 Previous entry, 2026-08-03: Big single-day session — full detail in
 "Done" below. Fleet standards-audit issue #8 closed. Shipped

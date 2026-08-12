@@ -11,6 +11,10 @@ services:
       PLEX_URL: "${PLEX_URL}"
       PLEX_TOKEN: "${PLEX_TOKEN}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # Idle-session eviction threshold (default 30 min). Read by config.ts
+      # all along but absent here, so it read as configurable and silently
+      # wasn't (docker-deployments.md §10). Tunable from Portainer.
+      MCP_SESSION_IDLE_TIMEOUT_MS: "${MCP_SESSION_IDLE_TIMEOUT_MS:-1800000}"
       # Required in HTTP mode (MCP-F03): comma-separated Host header values
       # this server accepts on /mcp. Must include whatever host:port a
       # client actually dials — e.g. your-nas:3001 for the mapped HOST_PORT
