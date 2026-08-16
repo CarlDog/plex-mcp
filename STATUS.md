@@ -923,10 +923,23 @@ downloader-mcp.
      (Plex displays out of 5 stars). Omitting `rating` clears it (Plex's
      `rating=-1` convention). Round-trip tested live against a real
      rated item (Arcane, `userRating: 10.0`), restored after.
-  2. `plex_remove_from_continue_watching(rating_key)` —
-     `PUT /actions/removeFromContinueWatching?key=` (not `ratingKey=`
-     as originally assumed — corrected via the OpenAPI spec). Not yet
-     shipped.
+  2. ~~`plex_remove_from_continue_watching(rating_key)`~~ — **attempted
+     and deferred 2026-08-15**. Implemented against the OpenAPI spec's
+     shape (`PUT /actions/removeFromContinueWatching?key=`), then live-
+     tested against a real in-progress item (rk 213958, `viewOffset:
+     399999`, present on both `/library/onDeck` and
+     `/hubs/continueWatching/items`) before writing tests or shipping —
+     every reasonable `key` value tried (bare ratingKey, full metadata
+     path both URL-encoded and raw, with/without
+     `identifier=com.plexapp.plugins.library`, with/without
+     client-identity headers) returned an identical generic `400 Bad
+     Request`. `POST` instead of `PUT` gave `404` (confirming `PUT` is
+     at least routed correctly). No python-plexapi coverage to
+     cross-check the real shape against. Reverted cleanly — confirmed
+     the test item's `viewOffset`/`lastViewedAt`/on-deck presence were
+     completely unaffected by the failed attempts. Revisit with a
+     clearer source (DevTools capture of Plex Web actually clicking
+     "Remove from Continue Watching").
   3. ~~`plex_update_timeline`~~ — **dropped 2026-08-15**. The real
      endpoint is `POST /:/timeline`, not `GET`, and it's a live-playback-
      session reporter (full `state: stopped/buffering/playing/paused`

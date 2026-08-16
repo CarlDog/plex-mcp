@@ -437,14 +437,16 @@ that carried a "✓ pkkid" mark below don't actually appear in
 python-plexapi's source at all. Corrected in place; see
 `plex_rate_item`/`plex_on_deck` in "Endpoints currently used" above
 for the two that shipped, and STATUS.md's Next section for the
-drop/defer reasoning on the other two. Shapes without any mark are
-still speculative.
+drop/defer reasoning on the other three (one dropped outright, two
+deferred — one for an ambiguous spec, one for a live 400 with no
+working parameter shape found). Shapes without any mark are still
+speculative.
 
 | Capability                              | Endpoint(s)                                                                              | Risk                     |
 | --------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ |
 | Smart playlists (filter expressions)    | `POST /playlists?type=&smart=1&uri=` (filter shape via `library:///` URI)                | Medium (complex shape)   |
 | Update playback timeline — declined     | `POST /:/timeline?key=&ratingKey=&state=&time=&duration=...` (confirmed via plex-api-spec; not in python-plexapi). Real shape is a live-playback-session reporter (~10 required client-identity headers, meant to be called every 10-20s by an actual player), not a one-shot resume-position setter as originally assumed | Declined — synthetic fake-session call, low value vs. `plex_mark_watched` |
-| Remove from Continue Watching           | `PUT /actions/removeFromContinueWatching?key=...` (confirmed via plex-api-spec; not in python-plexapi — param is `key`, not `ratingKey` as originally assumed) | Low (one-shot, reversible by viewing) — not yet shipped |
+| Remove from Continue Watching — deferred | `PUT /actions/removeFromContinueWatching?key=...` per plex-api-spec, but every reasonable `key` value tried live (2026-08-15) — bare ratingKey, full metadata path (encoded and raw), with/without `identifier=`, with/without client-identity headers — returned an identical generic `400`. `POST` gave `404` (so `PUT` is at least routed). No python-plexapi coverage to cross-check against | Deferred — real shape still unknown; revisit with a DevTools capture of Plex Web actually doing this |
 | Empty section trash — deferred          | `PUT`/`POST`/`GET /library/sections/{id}/emptyTrash` (confirmed to exist via plex-api-spec, but the spec itself lists all 3 HTTP methods claiming the same effect, no clear canonical one) | Deferred — irreversible delete + genuinely ambiguous method, not worth guessing at |
 | Analyze section ✓ pkkid                 | `PUT /library/sections/{id}/analyze`                                                     | Medium (server load)     |
 | Continue Watching hub explicit ✓ pkkid  | `GET /hubs/continueWatching/items`                                                       | Low                      |
