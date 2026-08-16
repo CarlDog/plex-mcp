@@ -1,6 +1,20 @@
 # Status
 
-**Last updated:** 2026-08-12 (Terminated MCP sessions now answer **HTTP
+**Last updated:** 2026-08-16 (`plex_rate_item` and section-scoped
+`plex_on_deck` shipped after re-verifying all 5 remaining v0.8/v0.9
+candidates against an independent OpenAPI spec — the old table's
+python-plexapi confirmations were wrong for 4 of 5.
+`plex_remove_from_continue_watching` was implemented, live-tested
+against a real item, and deferred when every reasonable parameter
+shape returned a 400. Along the way, found and fixed a genuinely
+critical bug: `docker-compose.yml` had `MCP_SESSION_IDLE_TIMEOUT_MS`
+defined twice (invalid YAML), which had been silently blocking every
+Portainer redeploy since 2026-08-12 — the live container was still
+running the 2026-08-10 image, meaning that date's 404-vs-400 session
+fix had never actually reached production. Fixed and redeployed;
+verified live that the 404 fix and both new tools are now genuinely
+running. See "Done" below for full detail.
+Previous entry, 2026-08-12: Terminated MCP sessions now answer **HTTP
 404, not 400** — the Streamable HTTP spec, 2025-06-18 Session Management
 §3/§4, makes 404 the client's only defined signal to re-initialize after
 an idle session is evicted, so the old 400 turned a routine eviction into
@@ -9,26 +23,13 @@ hand-rolls its `/mcp` handler rather than using the canonical
 `http-transport.ts`, so the handler was extracted out of the
 self-executing `src/index.ts` into `src/mcp-route.ts` — which finally
 gives it a seam to test against, covered by `tests/mcp-route.test.ts`.
-Also added
-`MCP_SESSION_IDLE_TIMEOUT_MS` to `docker-compose.yml`, where it had been
-missing despite `src/config.ts` reading it.
 Previous entry, 2026-08-05: Hardened `HOST_IMAGE_DIR`/`HOST_LOG_DIR`
 to required, no-relative-default compose vars — see "Done" below.
 Previous entry, 2026-08-03: Big single-day session — full detail in
 "Done" below. Fleet standards-audit issue #8 closed. Shipped
-collections, subtitle discovery, `plex_download_logs`, then a
-phase-end audit (doc drift, 4 dedups, a real timeout bug, and the
-long-standing `unmatch`/`applyMatch` flake finally root-caused and its
-real-world damage repaired live). Then shipped poster management
-(`plex_list_posters`/`plex_set_poster`/`plex_upload_poster`),
-correcting a stale design after researching python-plexapi's real
-source. Then closed out the remaining v0.8 doc-gap queue in
-`docs/PLEX-API.md` — Editions, the `tv.plex.agents.none://` GUID
-format, ratingKey churn on filesystem renames, `plex_refresh_section`'s
-two-pass semantics, and the `Field[]` locked-fields shape — correcting
-two more wrong assumptions along the way (Editions' field placement,
-confirmed against real Deadpool 2 / WrestleMania 42 data). Suite is
-121/121 green throughout.)
+collections, subtitle discovery, `plex_download_logs`, a phase-end
+audit, and poster management. See "Done" below for that entry's full
+detail.)
 
 ## Phase
 
@@ -888,6 +889,43 @@ downloader-mcp.
   `portainer_list_stacks`. README's Portainer section rewritten to
   describe the hard requirement instead of a documentation-only
   convention.
+
+- **`plex_rate_item` + section-scoped `plex_on_deck` shipped; `plex_
+  remove_from_continue_watching` attempted and deferred (2026-08-15/16).**
+  Re-verified all 5 "other v0.8/v0.9 candidates" against
+  `LukasParke/plex-api-spec` (an independent OpenAPI spec that
+  contract-tests against real Plex servers) before building anything —
+  the old table's python-plexapi "✓ pkkid" marks turned out wrong for
+  4 of 5. Outcome: 2 shipped, 1 dropped (`plex_update_timeline` — real
+  shape is a live-playback-session reporter, not a resume setter), 2
+  deferred (`plex_empty_section_trash` — spec itself ambiguous on HTTP
+  method; `plex_remove_from_continue_watching` — implemented, then
+  live-tested against a real in-progress item before shipping, and
+  every reasonable `key` value tried returned an identical `400` with
+  no python-plexapi coverage to fall back on). Full detail on each in
+  "Next" below. `plex_rate_item`/`plex_on_deck` round-trip tested live
+  and reverted cleanly.
+  - **A genuinely critical infrastructure bug found and fixed along
+    the way**: `docker-compose.yml` had `MCP_SESSION_IDLE_TIMEOUT_MS`
+    defined twice (invalid YAML — a duplicate mapping key), added by
+    the 2026-08-12 session without noticing it already existed from
+    earlier MCP-F03 work. This wasn't cosmetic — it hard-blocked every
+    Portainer git-stack redeploy attempt, discovered when this
+    session's own redeploy 500'd with a YAML parse error. The live
+    container's image revision was still `7c07c92` (built
+    2026-08-10) — meaning the 2026-08-12 fix for terminated MCP
+    sessions answering 400 instead of 404 (see that date's entry
+    above) had been sitting merged on `main` but **never actually
+    reached production** for 4+ days, almost certainly because this
+    same bug was silently failing Portainer's 5-minute auto-update
+    cycle the whole time. Fixed by removing the duplicate (kept the
+    version matching `src/config.ts`'s real default, `3600000`/1hr);
+    confirmed via `docker compose config` locally before pushing.
+    Redeploy succeeded immediately after, landing everything from
+    2026-08-10 through today in one shot — verified live: the 404
+    fix (bogus session ID now correctly returns 404, confirmed via a
+    direct request) and both new tools all working through the
+    actually-running container, not just CI.
 
 ## Next
 
