@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import type { Express, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { log } from "./log.js";
 
 export interface McpRouteOptions {
@@ -48,6 +48,20 @@ export interface McpRouteOptions {
    * effect.
    */
   sweepIntervalMs?: number;
+  /**
+   * Optional bearer-token auth (ChatGPT Apps SDK alignment, Phase 2 — see
+   * src/auth.ts). Runs AFTER checkHostAndOrigin below: the Host/Origin
+   * allowlist is the cheaper, no-crypto defense and should reject a
+   * spoofed Host before this does any JWKS work. Omitted entirely when
+   * auth isn't configured (MCP_OAUTH_ISSUER unset) — every existing
+   * caller of mountMcpRoute that doesn't pass this gets identical
+   * behavior to before this option existed.
+   */
+  authMiddleware?: (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => void | Promise<void>;
 }
 
 /**
@@ -84,7 +98,11 @@ export function mountMcpRoute(
     next();
   }
 
-  app.all(path, checkHostAndOrigin, async (req: Request, res: Response) => {
+  const middlewares = opts.authMiddleware
+    ? [checkHostAndOrigin, opts.authMiddleware]
+    : [checkHostAndOrigin];
+
+  app.all(path, ...middlewares, async (req: Request, res: Response) => {
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
       let transport: StreamableHTTPServerTransport;

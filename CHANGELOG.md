@@ -70,6 +70,15 @@ the work rather than after the fact.
 - `plex_on_deck` accepts an optional `section_id` to scope the on-deck
   list to one library section (`GET /library/sections/{id}/onDeck`)
   instead of the whole server.
+- Opt-in OAuth 2.1 protected-resource auth on the HTTP transport
+  (`src/auth.ts`) — ChatGPT Apps SDK alignment Phase 2. Bearer-JWT
+  validation via `jose` (JWKS resolved through OIDC discovery, cached
+  and refreshed on `kid` miss), `401`+`WWW-Authenticate` on missing/
+  invalid tokens, `403` on valid-but-missing-scope, and a
+  `/.well-known/oauth-protected-resource` route per RFC 9728. Default
+  off (`MCP_OAUTH_ISSUER` unset means identical behavior to before);
+  see README's "OAuth 2.1 bearer-token auth" section for the env vars.
+  Not yet practically usable — needs a real IdP (Phase 3, not started).
 
 ### Changed
 

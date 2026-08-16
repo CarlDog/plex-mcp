@@ -24,6 +24,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "express": "^4.21.0",
+    "jose": "^6.2.9",
     "selfsigned": "^5.5.0",
     "zod": "^3.23.8"
   },

@@ -1,6 +1,12 @@
 # Status
 
-**Last updated:** 2026-08-16 (`plex_rate_item` and section-scoped
+**Last updated:** 2026-08-16 (ChatGPT Apps SDK Phase 2 shipped: opt-in
+OAuth 2.1 protected-resource auth on `/mcp` via `src/auth.ts`, JWT
+validation against an OIDC-discovered JWKS using `jose`, off by
+default (`MCP_OAUTH_ISSUER` unset), 14 new tests against a local
+stand-in IdP. No real IdP exists yet — Phase 3. See "Done" below for
+full detail.
+Previous entry, same day: `plex_rate_item` and section-scoped
 `plex_on_deck` shipped after re-verifying all 5 remaining v0.8/v0.9
 candidates against an independent OpenAPI spec — the old table's
 python-plexapi confirmations were wrong for 4 of 5.
@@ -927,17 +933,85 @@ downloader-mcp.
     direct request) and both new tools all working through the
     actually-running container, not just CI.
 
+- **ChatGPT Apps SDK Phase 2 — OAuth 2.1 protected-resource auth
+  shipped, opt-in, not yet live-tested against a real IdP (2026-08-16).**
+  New `src/auth.ts`: validates a bearer JWT against the issuer's JWKS,
+  resolved via OIDC discovery and cached with `jose`'s
+  `createRemoteJWKSet`. `jose@6.2.9` added as a runtime dependency.
+  Behavior gated entirely on `MCP_OAUTH_ISSUER` being set —
+  unset means `loadAuthConfig()` returns `null` and the server behaves
+  exactly as before (same opt-in pattern as `MCP_TLS` in `src/tls.ts`).
+  When set, `MCP_OAUTH_AUDIENCE` is required (RFC 8707 audience
+  binding) and missing it fails fast (log + `process.exit(1)`) rather
+  than half-configuring; `MCP_OAUTH_REQUIRED_SCOPES` defaults to
+  `plex:read`, comma-separated for more. On rejection, the middleware
+  returns 401 with a `WWW-Authenticate: Bearer resource_metadata=...
+  scope=...` header (MCP Authorization spec, 2025-06-18) or 403 for a
+  valid token missing a required scope; the RFC 9728 protected-resource
+  metadata document is served at `/.well-known/oauth-protected-resource`
+  only when auth is configured.
+  - **Middleware ordering deviates from the original Phase 2 sketch
+    in `docs/CHATGPT-APPS-SDK.md`.** Rather than a standalone
+    `app.use()`, auth runs *inside* `mountMcpRoute` — `src/mcp-route.ts`
+    gained an optional `authMiddleware` field on `McpRouteOptions`,
+    spliced into the route's middleware chain after the existing
+    `checkHostAndOrigin` Host/Origin allowlist check. Rationale: the
+    allowlist is the cheaper, no-crypto check and should reject a
+    spoofed `Host` before any JWKS/JWT work runs. Confirmed
+    non-breaking: all 10 pre-existing `tests/mcp-route.test.ts` tests
+    passed unchanged (`authMiddleware` is `undefined` in every one).
+  - **Tested against a real local stand-in IdP, not mocks.**
+    `tests/auth.test.ts` (14 tests) generates a real ES256 keypair at
+    `beforeAll`, serves real `.well-known/openid-configuration` and
+    `.well-known/jwks.json` documents from a local Express server, and
+    exercises the actual `jose` verification path — missing header,
+    non-Bearer header, wrong audience, wrong issuer, expired, `nbf` in
+    the future, wrong signature, missing scope, and the happy path —
+    plus `loadAuthConfig`'s fail-fast and default-scope behavior and
+    `protectedResourceMetadata`'s RFC 9728 shape. No live Auth0/Logto
+    tenant exists yet (that's Phase 3); every rejection path was
+    confirmed via a real cryptographic failure, not a stubbed return.
+  - **Two deliberate simplifications, flagged but not yet raised for
+    Phase 3 planning:** the `/health` route was left outside the auth
+    middleware entirely (Docker's own healthcheck has no bearer token
+    to attach, and it's a separate route, never touched by
+    `mountMcpRoute`); and the `scope` claim is assumed to be a single
+    space-delimited string per standard OAuth2/Auth0 convention,
+    unverified against a real IdP's actual token shape.
+  - **OIDC discovery URL construction verified spec-correct but
+    untested against a path-based issuer.** Built by appending
+    `/.well-known/openid-configuration` to the issuer's existing path
+    (OIDC Discovery 1.0), not `new URL(path, issuer)` — which would
+    silently drop a multi-tenant issuer's path prefix. Auth0 issuers
+    are flat, so this distinction has no real-IdP test coverage yet.
+  - Docs updated: `docs/CHATGPT-APPS-SDK.md` Phase 2 section marked
+    done with full implementation notes; README gained an "OAuth 2.1
+    bearer-token auth (opt-in, not yet practically usable)" section
+    with the env-var table; CHANGELOG `[Unreleased]` entry added.
+  - Verified: `npm run typecheck` / `npm run build` / `eslint` /
+    `prettier --check` all clean. Full suite: 144/148 passing, the 4
+    failures being the pre-existing poster/editMetadata timeout flake
+    (environmental, unrelated — see `docker-deployments.md`-adjacent
+    flake note above and this session's own reproduction across 3 full
+    runs). All 14 new auth tests passed reliably every run.
+  - **Live production behavior unverified as of this writing** — the
+    Portainer stack's env has no `MCP_OAUTH_ISSUER` set, so this
+    should deploy as a no-op; confirming that (existing unauthenticated
+    tool calls keep working, no auth-related regression) is the last
+    step of this feature before it's considered fully shipped.
+
 ## Next
 
-- **ChatGPT Apps SDK alignment — Phase 1 done, Phases 2–4 not
+- **ChatGPT Apps SDK alignment — Phases 1–2 done, Phases 3–4 not
   started.** See [docs/CHATGPT-APPS-SDK.md](docs/CHATGPT-APPS-SDK.md)
-  for the full punch list. TL;DR: ChatGPT cannot consume plex-mcp
-  today because (1) the server isn't internet-reachable and (2) it
-  has no OAuth 2.1 protected-resource setup. Phase 1 (tool
-  annotation hints) shipped 2026-05-17. Phases 2–4 cover OAuth
-  middleware in plex-mcp, Cloudflare Tunnel + Auth0 (or self-hosted
-  IdP), and end-to-end ChatGPT dev-mode verification. Total
-  estimated remaining effort ~week of evening time, distributed.
+  for the full punch list. TL;DR: ChatGPT still cannot consume
+  plex-mcp because the server isn't internet-reachable and there's no
+  real IdP issuing tokens yet. Phase 1 (tool annotation hints) shipped
+  2026-05-17. Phase 2 (OAuth 2.1 middleware in plex-mcp itself) shipped
+  2026-08-16 — see "Done" above — opt-in via `MCP_OAUTH_ISSUER`, off by
+  default, verified against a local stand-in IdP only. Phases 3–4 cover
+  standing up a real IdP (Cloudflare Tunnel + Auth0 or self-hosted) and
+  end-to-end ChatGPT dev-mode verification against it.
 
 - **Cross-MCP file-passing pattern is live.** plex_save_image →
   `/data/images/` (= host `/volume1/Media/_mcp-scratch/`) →

@@ -3,6 +3,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer as createHttpsServer } from "node:https";
 import express, { type Request, type Response } from "express";
+import {
+  createAuthMiddleware,
+  loadAuthConfig,
+  protectedResourceMetadata,
+} from "./auth.js";
 import { config } from "./config.js";
 import { log } from "./log.js";
 import { mountMcpRoute } from "./mcp-route.js";
@@ -49,11 +54,32 @@ if (port) {
   const app = express();
   app.use(express.json());
 
+  // OAuth 2.1 protected-resource auth (ChatGPT Apps SDK alignment, Phase
+  // 2 — see docs/CHATGPT-APPS-SDK.md). Opt-in: MCP_OAUTH_ISSUER unset
+  // means authConfig is null and the server behaves exactly as before.
+  const authConfig = loadAuthConfig();
+  if (authConfig) {
+    log.info("auth", "OAuth enforcement enabled", {
+      issuer: authConfig.issuer,
+      required_scopes: authConfig.requiredScopes,
+    });
+    // Public per RFC 9728 — no auth on this route itself. Only mounted
+    // when auth is actually configured; with no issuer there's nothing
+    // accurate to report here.
+    app.get(
+      "/.well-known/oauth-protected-resource",
+      (_req: Request, res: Response) => {
+        res.json(protectedResourceMetadata(authConfig));
+      },
+    );
+  }
+
   mountMcpRoute(app, "/mcp", {
     createServer,
     allowedHosts: MCP_ALLOWED_HOSTS,
     allowedOrigins: MCP_ALLOWED_ORIGINS,
     sessionIdleTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+    authMiddleware: authConfig ? createAuthMiddleware(authConfig) : undefined,
   });
 
   const tls = await resolveTlsCredentials();

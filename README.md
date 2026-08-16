@@ -163,6 +163,28 @@ the proxy (with automatic Let's Encrypt) and keep `plex-mcp` on
 plain HTTP behind it. The two approaches are interchangeable — pick
 whichever matches your existing setup.
 
+### OAuth 2.1 bearer-token auth (opt-in, not yet practically usable)
+
+Code-side support for OAuth 2.1 protected-resource auth exists
+(ChatGPT Apps SDK alignment Phase 2 — see
+[docs/CHATGPT-APPS-SDK.md](docs/CHATGPT-APPS-SDK.md) for the full
+plan), but **isn't yet something you can actually turn on and use**:
+it needs a real OAuth 2.1 identity provider issuing tokens, and none
+is provisioned for this deployment (that's Phase 3, not started).
+Documented here for completeness, not as a how-to.
+
+| Var | Notes |
+| --- | --- |
+| `MCP_OAUTH_ISSUER` | IdP issuer URL. Setting this opts in to auth — unset (default) means no-auth, identical to today's behavior. |
+| `MCP_OAUTH_AUDIENCE` | Required once `MCP_OAUTH_ISSUER` is set. Expected `aud` claim — should equal this server's canonical public URL. Server refuses to start if missing. |
+| `MCP_OAUTH_REQUIRED_SCOPES` | Comma-separated. Default `plex:read`. |
+
+When enabled, every `/mcp` request needs `Authorization: Bearer
+<jwt>` — issued by the configured IdP, with the right audience and
+scope. `/health` is never affected (a separate route, and Docker's
+own healthcheck has no way to attach a bearer token). `/.well-known/oauth-protected-resource`
+is served automatically per RFC 9728.
+
 ## Run with Docker (stdio, on demand)
 
 ```bash

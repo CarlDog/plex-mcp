@@ -205,16 +205,57 @@ the rest.
   separate opinion-heavy scope, not gating on the OAuth work.
 - Benefits stock MCP clients too, not just ChatGPT.
 
-### Phase 2: code-side auth (no infra, ~half day)
+### Phase 2: code-side auth (no infra, ~half day) — DONE 2026-08-16
 
-- Add `src/auth.ts` — JWT verification middleware + JWKS cache.
-- Add `/.well-known/oauth-protected-resource` route in
-  `src/index.ts`.
-- Add 401 + WWW-Authenticate path.
-- Env-var driven; default off (no `MCP_OAUTH_ISSUER` = no-op).
-- Tests: token-with-wrong-aud → 401, expired token → 401, valid
-  token → pass-through, missing scope → 403. Mock JWKS, don't
-  hit a real IdP.
+- ✅ `src/auth.ts` — `loadAuthConfig()` (env-var driven, default off:
+  no `MCP_OAUTH_ISSUER` means `null` and the server behaves exactly
+  as before, matching `src/tls.ts`'s opt-in pattern), OIDC-discovery
+  + `jose`'s `createRemoteJWKSet` for JWKS (already handles
+  caching/refresh-on-`kid`-miss internally — no hand-rolled cache
+  needed), `createAuthMiddleware()`, `protectedResourceMetadata()`.
+- ✅ `/.well-known/oauth-protected-resource` route, mounted in
+  `src/index.ts` only when auth is configured (public, RFC 9728).
+- ✅ 401 + `WWW-Authenticate: Bearer resource_metadata="...",
+  scope="..."` on missing/invalid token; 403 on valid-but-missing-
+  scope.
+- **Ordering decision not in the original spec**: the auth middleware
+  runs *after* `src/mcp-route.ts`'s existing Host/Origin allowlist
+  check (`checkHostAndOrigin`), not before — that's the cheaper,
+  no-crypto defense and should reject a spoofed Host before any JWKS
+  work happens. Required a small additive change to `mcp-route.ts`
+  (`McpRouteOptions.authMiddleware?`, spliced into the existing
+  middleware chain) rather than mounting auth as its own
+  `app.use()` ahead of `mountMcpRoute()`. Backward-compatible: every
+  existing caller that doesn't pass `authMiddleware` gets identical
+  behavior (verified — all 10 pre-existing `mcp-route.test.ts` tests
+  still pass unchanged).
+- **Tests** (`tests/auth.test.ts`, 14 tests): real `jose` primitives
+  against a locally-generated keypair, JWKS + OIDC discovery served
+  from a real local HTTP server — no live IdP exists yet (that's
+  Phase 3), matching this file's own "mock JWKS, don't hit a real
+  IdP" plan. Covers: missing/malformed Authorization header, wrong
+  audience, wrong issuer, expired token, not-yet-valid (`nbf`) token,
+  wrong signature, missing required scope, valid pass-through, plus
+  `loadAuthConfig`'s env-var parsing and fail-fast-on-incomplete-config
+  behavior, plus the metadata document's shape.
+- **Known limitation, explicit in the code**: the OIDC discovery URL
+  is built by *appending* `/.well-known/openid-configuration` after
+  the issuer's own path (per the real OIDC Discovery 1.0 spec — a
+  multi-tenant IdP's issuer can carry a path), not by replacing it.
+  This is correct per spec but untested against a real path-based
+  issuer, since Auth0 (the planned Phase 3 IdP) uses flat issuers.
+  Revisit once Phase 3 provisions a real tenant.
+- **Deliberately simplified from the original spec, not yet raised
+  with the user for Phase 3 planning**: skipped the
+  `MCP_OAUTH_ALLOW_HEALTH_ANONYMOUS` toggle — `/health` is a
+  separate route the auth middleware never touches, and it's polled
+  from *inside* the container by Docker's own healthcheck with no
+  bearer token available, so making this "configurable" would only
+  be a way to accidentally break it. Also: `scope` claim is assumed
+  to be a single space-delimited string (standard OAuth2/Auth0
+  convention) — unverified against a real IdP; if Phase 3's real
+  Auth0 tokens turn out to shape scopes differently, this needs a
+  fix.
 
 ### Phase 3: infrastructure (~one evening)
 
