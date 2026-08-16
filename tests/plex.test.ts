@@ -916,6 +916,45 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     },
   );
 
+  describe.sequential("rateItem round trip", () => {
+    let originalRating: number | undefined;
+
+    beforeAll(async () => {
+      const item = (await client.getItem(fixtures.showRatingKey)) as {
+        userRating?: number;
+      };
+      originalRating = item.userRating;
+    });
+
+    afterAll(async () => {
+      // Best-effort restore even if a test mid-block failed.
+      try {
+        await client.rateItem(fixtures.showRatingKey, originalRating);
+      } catch {
+        // already-restored or transient — not worth failing afterAll
+      }
+    });
+
+    it("sets and reads back a sentinel rating", async () => {
+      // Pick a sentinel guaranteed to differ from whatever's there now
+      // (including "unrated") so the round trip is meaningful either way.
+      const sentinel = originalRating === 8 ? 6 : 8;
+      await client.rateItem(fixtures.showRatingKey, sentinel);
+      const after = (await client.getItem(fixtures.showRatingKey)) as {
+        userRating?: number;
+      };
+      expect(after.userRating).toBe(sentinel);
+    });
+
+    it("restores the original rating (or clears it if it was unrated)", async () => {
+      await client.rateItem(fixtures.showRatingKey, originalRating);
+      const after = (await client.getItem(fixtures.showRatingKey)) as {
+        userRating?: number;
+      };
+      expect(after.userRating).toBe(originalRating);
+    });
+  });
+
   // .sequential because we don't want parallel mutations on the
   // same item across other (hypothetical future) write tests.
   describe.sequential("mark_watched / mark_unwatched round trip", () => {

@@ -684,6 +684,30 @@ export class PlexClient {
   }
 
   /**
+   * Set (or clear) an item's user star rating.
+   *
+   * `PUT /:/rate?key={ratingKey}&identifier=com.plexapp.plugins.library
+   * &rating={rating}` — confirmed against python-plexapi's
+   * `RatingMixin.rate()` (`plexapi/mixins/rating.py`). Rating is 0-10;
+   * Plex displays it out of 5 stars (7.0 = 3.5 stars). Omitting `rating`
+   * clears it — Plex's convention for "no rating" is the literal value
+   * `-1`, which is what python-plexapi sends when its own `rating`
+   * argument is omitted.
+   */
+  async rateItem(ratingKey: string, rating?: number): Promise<void> {
+    const value = rating === undefined ? -1 : rating;
+    await this.requestNoContent(
+      "/:/rate",
+      {
+        key: ratingKey,
+        identifier: "com.plexapp.plugins.library",
+        rating: String(value),
+      },
+      "PUT",
+    );
+  }
+
+  /**
    * Tell Plex to re-pull metadata for an item from its currently-bound
    * agent. Useful when poster/summary/etc. are stale, or after fixing
    * a match. Empty 200 response — uses requestNoContent.

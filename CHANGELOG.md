@@ -65,6 +65,8 @@ the work rather than after the fact.
   with a `select` flag — the real python-plexapi source shows them as
   separate operations, and live testing confirmed Plex auto-selects
   every freshly uploaded poster server-side regardless.
+- `plex_rate_item` — set or clear an item's 0–10 user star rating
+  (`PUT /:/rate`). Omitting `rating` clears it back to unrated.
 
 ### Changed
 

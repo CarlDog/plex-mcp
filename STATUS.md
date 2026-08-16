@@ -911,23 +911,43 @@ downloader-mcp.
   (e.g. `_arr-scratch/`).
 
 - **Other v0.8 / v0.9 candidates carried from v0.7 queue.**
-  Endpoint shapes confirmed against python-plexapi 2026-05-13
-  (see `docs/PLEX-API.md` cross-validation section). None
-  shipped yet:
-  1. `plex_rate_item(rating_key, rating)` — `PUT /:/rate?...` —
-     0–10 scale to 0–5 stars. pkkid `mixins/rating.py`.
+  Re-verified 2026-08-15 against an independent OpenAPI spec
+  ([LukasParke/plex-api-spec](https://github.com/LukasParke/plex-api-spec),
+  which contract-tests against real Plex servers) — the old table's
+  "✓ pkkid" marks turned out unreliable for 4 of 5: `removeFromContinueWatching`,
+  `emptyTrash`, `/:/timeline`, and section `onDeck` don't appear in
+  python-plexapi's current source at all (only `rate()` does).
+  1. ~~`plex_rate_item(rating_key, rating)`~~ — **shipped 2026-08-15**.
+     `PUT /:/rate?key=&identifier=com.plexapp.plugins.library&rating=`,
+     confirmed against python-plexapi's `RatingMixin.rate()`. 0–10 scale
+     (Plex displays out of 5 stars). Omitting `rating` clears it (Plex's
+     `rating=-1` convention). Round-trip tested live against a real
+     rated item (Arcane, `userRating: 10.0`), restored after.
   2. `plex_remove_from_continue_watching(rating_key)` —
-     `PUT /actions/removeFromContinueWatching?ratingKey=` —
-     cleans up the Continue Watching hub. pkkid `video.py`.
-  3. `plex_update_timeline(rating_key, time_ms, state, duration_ms?)` —
-     `GET /:/timeline?...` — set playback resume position. Was
-     deferred in v0.4 as "low value vs scrobble"; pkkid
-     confirms shape now. Reconsider whether to ship.
-  4. `plex_empty_section_trash(section_id)` — `PUT /library/sections/{id}/emptyTrash`
-     — post-cleanup helper for bulk filesystem ops.
-  5. Section-scoped `plex_on_deck(section_id?)` — extend the
-     existing tool with optional `section_id` arg
-     (`GET /library/sections/{id}/onDeck`).
+     `PUT /actions/removeFromContinueWatching?key=` (not `ratingKey=`
+     as originally assumed — corrected via the OpenAPI spec). Not yet
+     shipped.
+  3. ~~`plex_update_timeline`~~ — **dropped 2026-08-15**. The real
+     endpoint is `POST /:/timeline`, not `GET`, and it's a live-playback-
+     session reporter (full `state: stopped/buffering/playing/paused`
+     semantics, ~10 required client-identity headers, meant to be
+     called every 10–20s by an actual player) — not a simple resume-
+     position setter as assumed. Already flagged "reconsider whether to
+     ship" for low value vs. `plex_mark_watched`/scrobble before this
+     discovery; not worth building as a synthetic one-shot fake-session
+     call.
+  4. ~~`plex_empty_section_trash(section_id)`~~ — **deferred 2026-08-15**.
+     Genuinely irreversible (permanently deletes media/metadata for
+     already-trashed items), and the OpenAPI spec itself is unsure of
+     the HTTP method — it lists GET, POST, *and* PUT variants all
+     claiming the same effect, with no clear canonical signal. Not
+     worth guessing at for an irreversible delete. Revisit with a
+     clearer source (e.g. a DevTools capture of Plex Web actually
+     clicking "Empty Trash").
+  5. Section-scoped `plex_on_deck(section_id?)` — `GET
+     /library/sections/{id}/onDeck`, confirmed via the OpenAPI spec,
+     exactly matches the original assumption. Read-only. Not yet
+     shipped.
 - **Outstanding audit items now closed by v0.6 + v0.7.** All four of
   the originally-blocked WWE PPV items have a resolution path
   using shipped tools. Pending only operator actions.
