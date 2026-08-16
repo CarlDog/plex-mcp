@@ -101,11 +101,20 @@ export function registerDiscoveryTools(
     {
       title: "Plex On Deck",
       description:
-        'Get items "on deck" — partially watched or next-up content.',
-      inputSchema: {},
+        'Get items "on deck" — partially watched or next-up content. Server-wide by default; pass section_id to scope to one library section.',
+      inputSchema: {
+        section_id: z
+          .string()
+          .optional()
+          .describe(
+            "Library section ID (from plex_list_libraries) to scope on-deck items to. Omit for server-wide.",
+          ),
+      },
       annotations: READ_ONLY_ANNOTATIONS,
     },
-    withLogging("plex_on_deck", async () => asText(await plex.onDeck())),
+    withLogging("plex_on_deck", async ({ section_id }) =>
+      asText(await plex.onDeck(section_id)),
+    ),
   );
 
   server.registerTool(

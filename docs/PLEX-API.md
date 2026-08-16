@@ -14,12 +14,28 @@ The community-maintained sources that come closest to authoritative:
 - **[plexapi.dev](https://plexapi.dev/)** — de-facto API reference.
   Endpoints, query params, response shapes. Most thorough thing
   available; start here.
-- **[python-plexapi source](https://github.com/pkkid/python-plexapi/tree/master/plexapi)** —
-  when plexapi.dev is silent on an endpoint, the Python lib's source
-  is often the only documentation. Useful files: `library.py`,
-  `media.py`, `playlist.py`, `audio.py`, `video.py`.
-- **[LukeHagar/plex-api-spec](https://github.com/LukeHagar/plex-api-spec)** —
-  community OpenAPI 3 spec. Partial coverage, machine-readable.
+- **[python-plexapi source](https://github.com/pushingkarmaorg/python-plexapi/tree/master/plexapi)**
+  (`pkkid/python-plexapi` redirects here — repo was renamed) — when
+  plexapi.dev is silent on an endpoint, the Python lib's source is
+  often the only documentation. Useful files: `library.py`,
+  `media.py`, `playlist.py`, `audio.py`, `video.py`, and the
+  `mixins/` directory (`editions.py`, `rating.py`, `resources.py`
+  covers posters/art/themes/logos, `unmatch_match.py`, etc.). Doesn't
+  cover 100% of Plex's real API surface — confirmed absent for
+  several endpoints this repo has since shipped or evaluated
+  (`removeFromContinueWatching`, `emptyTrash`, `/:/timeline`,
+  section-scoped `onDeck`) despite older notes here claiming
+  otherwise; cross-check against a second source before trusting a
+  "not in python-plexapi" conclusion.
+- **[LukasParke/plex-api-spec](https://github.com/LukasParke/plex-api-spec)**
+  (`LukeHagar/plex-api-spec` redirects here — repo was renamed) —
+  community OpenAPI 3 spec with CI contract-testing against real Plex
+  servers (see its `.github/workflows/contract-test.yml`,
+  `discovery.yml`). Broader coverage than python-plexapi for some
+  action/mutation endpoints; useful second source when python-plexapi
+  is silent. Occasionally itself uncertain (e.g. `emptyTrash` lists
+  GET/POST/PUT variants with no clear canonical one) — verify
+  ambiguous entries against a live capture before trusting blindly.
 - **DevTools spying** — Plex's own Web client at `app.plex.tv` calls
   the same API. Open browser DevTools → Network tab while clicking
   around to see real-world calls and responses. Last-resort discovery
@@ -349,6 +365,21 @@ current data —
 `(item.Field ?? []).some((f) => f.name === "title")` answers "is the
 title locked" directly.
 
+### Section-scoped on-deck entries don't reliably carry `librarySectionID`
+
+`GET /library/sections/{id}/onDeck` scopes the on-deck list to one
+section by the request URL, but confirmed live (2026-08-15, Anime
+section, 19 items): 5 of 19 returned entries omitted
+`librarySectionID` **and** `librarySectionKey` **and**
+`librarySectionTitle` entirely — not `null`, just absent from the
+response — while the other 14 carried `librarySectionID` matching the
+requested section normally. All 19 were genuinely `type: "episode"`
+entries scoped correctly (the endpoint itself works); Plex just
+doesn't consistently stamp the section-identity fields onto every
+on-deck entry. Don't build tooling that assumes every item in this
+response carries `librarySectionID` — check for its presence before
+relying on it, the way `tests/plex.test.ts`'s on-deck test does.
+
 ## Endpoints currently used
 
 | Tool                  | Endpoint                                                               | Notes                                                                  |
@@ -356,7 +387,7 @@ title locked" directly.
 | `plex_list_libraries` | `GET /library/sections`                                                | Returns `MediaContainer.Directory[]`                                   |
 | `plex_search`         | `GET /search?query=...`                                                | Cross-library                                                          |
 | `plex_recently_added` | `GET /library/recentlyAdded` or `/library/sections/{id}/recentlyAdded` | Section filter optional                                                |
-| `plex_on_deck`        | `GET /library/onDeck`                                                  |                                                                        |
+| `plex_on_deck`        | `GET /library/onDeck` or `/library/sections/{id}/onDeck`               | `section_id` optional; section-scoped confirmed via `LukasParke/plex-api-spec` (not in python-plexapi) |
 | `plex_get_item`       | `GET /library/metadata/{rating_key}`                                   | Returns first `Metadata[]` entry                                       |
 | `plex_get_children`   | `GET /library/metadata/{rating_key}/children`                          | Show→seasons, season→episodes, artist→albums, album→tracks             |
 | `plex_browse`         | `GET /library/sections/{id}/all`                                       | Paged via `X-Plex-Container-Start/Size` headers; optional `type=N`; `fields[]` is a client-side projection (Plex still sends full payload, we filter before returning) |
@@ -364,6 +395,7 @@ title locked" directly.
 | `plex_history`        | `GET /status/sessions/history/all`                                     | Paged; `sort=viewedAt:desc`; optional `librarySectionID`               |
 | `plex_mark_watched`   | `GET /:/scrobble?key=...&identifier=com.plexapp.plugins.library`       | Empty 200 — use `requestNoContent`                                     |
 | `plex_mark_unwatched` | `GET /:/unscrobble?key=...&identifier=com.plexapp.plugins.library`     | Empty 200                                                              |
+| `plex_rate_item`      | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` | Empty 200 — 0-10 scale; omitting `rating` sends `-1` to clear it       |
 | `plex_list_playlists` | `GET /playlists`                                                       | Includes both regular and smart playlists                              |
 | `plex_get_playlist_items` | `GET /playlists/{id}/items`                                        | Each item has `playlistItemID` (≠ `ratingKey`)                         |
 | `plex_create_playlist` | `POST /playlists?type=&title=&smart=0&uri=server://...`               | Requires at least one initial item via `uri=`                          |
@@ -394,19 +426,26 @@ All requests carry `X-Plex-Token: <token>` as an HTTP header
 ## Endpoints we haven't built yet
 
 Candidates with rough endpoint shapes so future-us has a starting
-point. Shapes marked **✓ pkkid** have been confirmed against
-python-plexapi master (cross-validated 2026-05-13 — see section
-below). Shapes without ✓ are speculative.
+point. Shapes marked **✓ pkkid** were originally claimed confirmed
+against python-plexapi master (cross-validated 2026-05-13 — see
+section below). **That mark turned out unreliable**: re-checked
+2026-08-15 against both python-plexapi's *current* source and an
+independent OpenAPI spec
+([`LukasParke/plex-api-spec`](https://github.com/LukasParke/plex-api-spec),
+which contract-tests against real Plex servers) — 4 of the 5 rows
+that carried a "✓ pkkid" mark below don't actually appear in
+python-plexapi's source at all. Corrected in place; see
+`plex_rate_item`/`plex_on_deck` in "Endpoints currently used" above
+for the two that shipped, and STATUS.md's Next section for the
+drop/defer reasoning on the other two. Shapes without any mark are
+still speculative.
 
 | Capability                              | Endpoint(s)                                                                              | Risk                     |
 | --------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ |
 | Smart playlists (filter expressions)    | `POST /playlists?type=&smart=1&uri=` (filter shape via `library:///` URI)                | Medium (complex shape)   |
-| Rate item ✓ pkkid                       | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` (0–10 → 0–5 stars) | Low                      |
-| Update playback timeline ✓ pkkid        | `GET /:/timeline?ratingKey=...&key=...&identifier=...&time=...&state=...&duration=...`   | Low                      |
-| Update playback progress (lighter) ✓ pkkid | `GET /:/progress?key=...&identifier=...&time=...&state=...`                           | Low                      |
-| Remove from Continue Watching ✓ pkkid   | `PUT /actions/removeFromContinueWatching?ratingKey=...`                                  | Low (one-shot, reversible by viewing) |
-| Section-scoped on-deck ✓ pkkid          | `GET /library/sections/{id}/onDeck`                                                      | Low (read-only, fills a gap in plex_on_deck) |
-| Empty section trash ✓ pkkid             | `PUT /library/sections/{id}/emptyTrash`                                                  | Medium (irreversible)    |
+| Update playback timeline — declined     | `POST /:/timeline?key=&ratingKey=&state=&time=&duration=...` (confirmed via plex-api-spec; not in python-plexapi). Real shape is a live-playback-session reporter (~10 required client-identity headers, meant to be called every 10-20s by an actual player), not a one-shot resume-position setter as originally assumed | Declined — synthetic fake-session call, low value vs. `plex_mark_watched` |
+| Remove from Continue Watching           | `PUT /actions/removeFromContinueWatching?key=...` (confirmed via plex-api-spec; not in python-plexapi — param is `key`, not `ratingKey` as originally assumed) | Low (one-shot, reversible by viewing) — not yet shipped |
+| Empty section trash — deferred          | `PUT`/`POST`/`GET /library/sections/{id}/emptyTrash` (confirmed to exist via plex-api-spec, but the spec itself lists all 3 HTTP methods claiming the same effect, no clear canonical one) | Deferred — irreversible delete + genuinely ambiguous method, not worth guessing at |
 | Analyze section ✓ pkkid                 | `PUT /library/sections/{id}/analyze`                                                     | Medium (server load)     |
 | Continue Watching hub explicit ✓ pkkid  | `GET /hubs/continueWatching/items`                                                       | Low                      |
 | Player control (play/pause/skip)        | `/player/playback/playMedia`, `/player/playback/pause`, etc.                             | Medium (live device)     |

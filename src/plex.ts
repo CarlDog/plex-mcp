@@ -445,10 +445,19 @@ export class PlexClient {
     return data.MediaContainer?.Metadata ?? [];
   }
 
-  async onDeck(): Promise<unknown[]> {
-    const data = await this.request<{ Metadata?: unknown[] }>(
-      "/library/onDeck",
-    );
+  /**
+   * "On deck" items — server-wide, or scoped to one library section.
+   *
+   * `GET /library/onDeck` (server-wide) or `GET
+   * /library/sections/{sectionId}/onDeck` (section-scoped), confirmed
+   * against `LukasParke/plex-api-spec`'s `getOnDeckForSection` operation
+   * (python-plexapi doesn't model this endpoint at all).
+   */
+  async onDeck(sectionId?: string): Promise<unknown[]> {
+    const path = sectionId
+      ? `/library/sections/${sectionId}/onDeck`
+      : "/library/onDeck";
+    const data = await this.request<{ Metadata?: unknown[] }>(path);
     return data.MediaContainer?.Metadata ?? [];
   }
 

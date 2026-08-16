@@ -18,7 +18,7 @@ your Plex libraries.
 | `plex_search` | Search across all libraries |
 | `plex_hub_search` | Search via Plex's hub-search endpoint, including collections (unlike `plex_search`) |
 | `plex_recently_added` | Recently added items, optionally per-section |
-| `plex_on_deck` | Items "on deck" (partially watched / next up) |
+| `plex_on_deck` | Items "on deck" (partially watched / next up); optional `section_id` scopes to one library section |
 | `plex_get_item` | Metadata for one item by rating key. Pass `minimal=true` to drop bulky cast/crew/image arrays (~80% size reduction on movies with deep casts) while keeping subtitle-track info; pass `fields=[...]` for explicit projection |
 | `plex_browse` | List items in a library section (paged, optional type filter, optional `collection` title filter, optional sparse `fields` projection) |
 | `plex_list_collections` | List collections in a library section (thin wrapper over `plex_browse`'s collection type) |

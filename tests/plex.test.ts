@@ -122,6 +122,27 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     expect(Array.isArray(items)).toBe(true);
   });
 
+  it("onDeck scoped to a section only returns items from that section", async () => {
+    const items = (await client.onDeck(fixtures.showSectionId)) as Array<{
+      librarySectionID?: string | number;
+    }>;
+    expect(Array.isArray(items)).toBe(true);
+    // Not every on-deck entry carries librarySectionID — confirmed live
+    // (2026-08-15, see docs/PLEX-API.md): some section-scoped on-deck
+    // entries omit librarySectionID/Key/Title entirely, a genuine Plex
+    // API inconsistency rather than a plex-mcp bug. Only assert on
+    // entries that do carry the field.
+    for (const item of items) {
+      if (
+        item.librarySectionID === undefined ||
+        item.librarySectionID === null
+      ) {
+        continue;
+      }
+      expect(String(item.librarySectionID)).toBe(fixtures.showSectionId);
+    }
+  });
+
   it("getItem returns the item with the requested rating_key", async () => {
     const item = (await client.getItem(fixtures.showRatingKey)) as
       { ratingKey: string } | undefined;

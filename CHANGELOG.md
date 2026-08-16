@@ -67,6 +67,9 @@ the work rather than after the fact.
   every freshly uploaded poster server-side regardless.
 - `plex_rate_item` — set or clear an item's 0–10 user star rating
   (`PUT /:/rate`). Omitting `rating` clears it back to unrated.
+- `plex_on_deck` accepts an optional `section_id` to scope the on-deck
+  list to one library section (`GET /library/sections/{id}/onDeck`)
+  instead of the whole server.
 
 ### Changed
 
