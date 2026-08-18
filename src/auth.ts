@@ -22,6 +22,7 @@
 
 import type { NextFunction, Request, Response } from "express";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import { describeTransportError } from "./errors.js";
 import { log } from "./log.js";
 
 export interface AuthConfig {
@@ -78,7 +79,15 @@ async function resolveJwks(issuer: string): Promise<JWTVerifyGetKey> {
   const discoveryUrl = new URL(
     `${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`,
   );
-  const res = await fetch(discoveryUrl);
+  let res: globalThis.Response;
+  try {
+    res = await fetch(discoveryUrl);
+  } catch (err) {
+    throw new Error(
+      `OIDC discovery failed for ${issuer}: ${describeTransportError(err)}`,
+      { cause: err },
+    );
+  }
   if (!res.ok) {
     throw new Error(
       `OIDC discovery failed for ${issuer}: ${res.status} ${res.statusText}`,

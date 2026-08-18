@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { describeTransportError } from "./errors.js";
 import { log } from "./log.js";
 
 export interface PlexConfig {
@@ -304,13 +305,16 @@ export class PlexClient {
         ...(body ? { body: body as BodyInit } : {}),
       });
     } catch (err) {
+      const message = describeTransportError(err);
       log.error("plex", "network error", {
         method,
         path,
         ms: Date.now() - start,
-        msg: (err as Error).message,
+        msg: message,
       });
-      throw err;
+      throw err instanceof Error && message !== err.message
+        ? new Error(message, { cause: err })
+        : err;
     }
     const ms = Date.now() - start;
     if (!res.ok) {
