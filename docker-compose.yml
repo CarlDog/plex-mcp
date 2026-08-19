@@ -4,6 +4,7 @@ services:
     pull_policy: always
     container_name: plex-mcp
     restart: unless-stopped
+    network_mode: bridge
     ports:
       - "${HOST_PORT:-3001}:3000"
     environment:
