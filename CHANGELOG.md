@@ -11,6 +11,15 @@ the work rather than after the fact.
 
 ## [Unreleased]
 
+### Changed
+
+- **Package renamed to `@carldog/plex-mcp`.** The unscoped name `plex-mcp`
+  is owned by an unrelated package (`vyb1ng/plex-mcp`), so it was never
+  available; a scope is reserved to the account, so no name inside it can be
+  taken. Nothing is published to npm - this ships as a container - so the
+  rename is invisible to consumers; `package-lock.json` was regenerated with
+  it.
+
 ## [0.8.0] - 2026-08-28
 
 ### Added
