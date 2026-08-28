@@ -124,6 +124,15 @@ docker compose up --build
 
 ## Conventions
 
+- **`package.json` is `private: true` — deliberate, not an oversight.**
+  The unscoped npm name `plex-mcp` has belonged to an unrelated package
+  (`vyb1ng/plex-mcp`) since before we looked, so this project can never
+  publish under it, while `bin` + `files: ["dist"]` advertised a
+  publishable shape. This server is distributed as a container
+  (`ghcr.io/carldog/plex-mcp`) — there is no publish workflow and no
+  `NPM_TOKEN`. `private: true` makes the config honest and blocks an
+  accidental publish. Reversible in one line if a scoped name is adopted.
+
 - All logging goes to **stderr** (`console.error`). In stdio mode,
   stdout is the MCP wire protocol — writing to it corrupts the
   transport. Even in HTTP mode, keep logs on stderr for consistency.
