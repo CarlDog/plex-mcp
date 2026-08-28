@@ -1,6 +1,16 @@
 # Status
 
-**Last updated:** 2026-08-18 (network-error messages now surface their real
+**Last updated:** 2026-08-18 (moved the Portainer stack onto the shared
+Docker bridge network — `network_mode: bridge` added to
+`docker-compose.yml`. The NAS's Docker default-address-pool was fully
+exhausted; this stack's dedicated per-project network (`plex-mcp_default`)
+was one of many single-container stacks each claiming a slice for a
+container that has no need for inter-container DNS — Plex is reached via
+`PLEX_URL` over `host.docker.internal`/LAN, not a container name. Port
+publishing (`${HOST_PORT:-3001}:3000`) and `extra_hosts`
+(`host.docker.internal:host-gateway`) both work unchanged under bridge
+mode.
+Previous entry, same day: network-error messages now surface their real
 cause — `sendRequest()`'s catch and `auth.ts`'s OIDC discovery both built
 their message from `err.message` only, which on a real `fetch()` failure is
 Node's generic `TypeError: fetch failed`, discarding the actual
@@ -10,7 +20,7 @@ dropped a second time if not folded into the message itself. Found via a
 fleet-wide sweep prompted by a live incident in downloader-mcp; new
 `src/errors.ts` `describeTransportError()`, wired into both call sites,
 new `tests/errors.test.ts`.
-Previous entry: 2026-08-16 (ChatGPT Apps SDK Phase 2 shipped: opt-in
+Previous entry, 2026-08-16 (ChatGPT Apps SDK Phase 2 shipped: opt-in
 OAuth 2.1 protected-resource auth on `/mcp` via `src/auth.ts`, JWT
 validation against an OIDC-discovered JWKS using `jose`, off by
 default (`MCP_OAUTH_ISSUER` unset), 14 new tests against a local

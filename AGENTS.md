@@ -1,0 +1,196 @@
+# plex-mcp
+
+MCP server for Plex Media Server, packaged as a Docker container.
+
+**Fleet standards:** ts-mcp-server v1.0 — audited 2026-07-25
+
+## Status
+
+Single source of truth: [STATUS.md](STATUS.md). Do not duplicate status
+into this file, MEMORY.md, or Serena memories — reference STATUS.md.
+
+## Current Sprint
+
+See [STATUS.md](STATUS.md) for the active phase, what's done, and
+what's next.
+
+## Stack
+
+- TypeScript (Node 22+, ESM, `NodeNext` module resolution)
+- `@modelcontextprotocol/sdk` (high-level `McpServer` API)
+- `zod` for tool input schemas
+- Plex HTTP API via `fetch` (no Plex SDK dependency)
+- Docker multi-stage build (alpine, non-root)
+
+## Layout
+
+- `src/index.ts` — MCP server entry. Decides transport based on `MCP_PORT`.
+- `src/mcp-route.ts` — the Streamable HTTP `/mcp` route: Host/Origin
+  allowlist, per-session transport map, idle sweep, session dispatch.
+  Split out of `index.ts` so it can be imported by a test — `index.ts`
+  self-executes on import, so nothing in it was reachable without booting
+  a server. Covered by `tests/mcp-route.test.ts`.
+- `src/plex.ts` — Plex HTTP API client.
+- `src/log.ts` — small structured logger (stderr, level-gated via
+  `LOG_LEVEL` env var). See README for format and levels.
+- `src/tools/` — tool registrations split per domain
+  (`discovery.ts`, `sessions.ts`, `playback.ts`, `playlists.ts`,
+  `hubs.ts`, `admin.ts`, `images.ts`, `diagnostics.ts`). `index.ts`
+  orchestrates via `registerTools(server, plex)`; `helpers.ts` holds
+  shared utilities (`asText`, `withLogging`).
+- `Dockerfile` — multi-stage build for the runtime image.
+- `docker-compose.yml` — Compose/Portainer deployment using HTTP transport.
+- `docs/PLEX-API.md` — curated reference for the Plex HTTP API: external
+  doc links, gotchas we've hit (pagination pairing, `/:/scrobble` empty
+  responses, `type` integer codes), and rough endpoint shapes for
+  capabilities we haven't built yet. Read this before adding new tools.
+- `docs/CHATGPT-APPS-SDK.md` — future-work spec for making plex-mcp
+  consumable from a ChatGPT account (OAuth 2.1 protected-resource
+  setup, tool annotation hints, optional UI widgets, infrastructure
+  choices). Not started; phased plan inside.
+- `.githooks/pre-commit` — gitleaks + PII pattern scan.
+- `.gitleaks.toml` — secret-scanning config.
+
+## When to add a `tools/` layer
+
+> **STALE — flagged 2026-08-12, see STATUS.md "Known Gaps".** This
+> section describes the `src/tools/` split as a future trigger, but the
+> split already happened; the Layout section above lists the real
+> structure. Read it as history, not as current guidance.
+
+Today the structure is flat: `src/plex.ts` holds the API client and
+`src/index.ts` registers tools inline (inside `createServer()`). That's
+idiomatic when each tool is a thin wrapper over a single API call.
+
+**Trigger to refactor:** the first tool that doesn't fit cleanly inline
+in `index.ts`. Concretely:
+
+- A tool that does **non-trivial composition** of multiple Plex API
+  calls — cross-references, ranking, filtering beyond what the API
+  exposes natively (e.g. "what should I watch tonight" combining
+  on-deck + watch history + recently added with custom logic).
+- Adding a **second integration** (e.g. Tautulli for stats). At that
+  point one-file-per-integration plus a `src/tools/` directory becomes
+  the natural shape.
+
+When that moment arrives, pull tool registrations out of `index.ts`
+into `src/tools/<descriptive-name>.ts`. Mechanical refactor.
+
+Don't pre-split before that trigger. Three similar lines is better than
+a premature abstraction — and the right split shape is easier to see
+once the first complex tool exists than before.
+
+## Transport modes
+
+The same image supports two transports, selected at start time:
+
+- **stdio (default)** — used when `MCP_PORT` is unset. The server reads
+  MCP wire from stdin and writes to stdout. This is the standard mode
+  for `docker run -i` invocation by an MCP client (Codex Desktop, etc.).
+- **HTTP (Streamable HTTP)** — used when `MCP_PORT` is set to a port
+  number. The server listens on `0.0.0.0:$MCP_PORT` with two endpoints:
+  - `POST/GET/DELETE /mcp` — MCP Streamable HTTP per spec; per-session
+    `mcp-session-id` header. Clients initialize via `POST /mcp` (no
+    session header) which mints a UUID; subsequent requests reuse it.
+  - `GET /health` — liveness probe (used by docker healthcheck).
+
+  Per-session McpServer instances are created via the `createServer()`
+  factory; the shared `PlexClient` is module-scope.
+
+  HTTPS is opt-in via `src/tls.ts`. Resolution order at startup:
+  `MCP_TLS_CERT_FILE`+`KEY_FILE` (BYO) → `MCP_TLS=auto` (self-managed
+  ECDSA P-256 cert under `MCP_TLS_DIR`, regenerated when <30 days
+  remain) → plain HTTP. Server logs the cert's SHA-256 fingerprint
+  and `notAfter` on startup. See README's "Enabling HTTPS" for the
+  full env-var matrix.
+
+The two modes are mutually exclusive in a given process.
+
+## Common Commands
+
+```bash
+npm install            # install deps
+npm run build          # tsc → dist/
+npm run dev            # tsx src/index.ts (requires PLEX_URL, PLEX_TOKEN)
+npm run typecheck      # tsc --noEmit
+docker build -t plex-mcp .
+
+# stdio (manual smoke test):
+docker run -i --rm -e PLEX_URL=... -e PLEX_TOKEN=... plex-mcp
+
+# HTTP (compose-style):
+docker compose up --build
+```
+
+## Conventions
+
+- All logging goes to **stderr** (`console.error`). In stdio mode,
+  stdout is the MCP wire protocol — writing to it corrupts the
+  transport. Even in HTTP mode, keep logs on stderr for consistency.
+- Tool names use `plex_` prefix and snake_case.
+- Tool inputs validated with `zod`. Outputs returned as a single
+  JSON-stringified text content block.
+- Plex auth via env vars `PLEX_URL` and `PLEX_TOKEN`. The container is
+  stateless; the token never lands on disk in the image.
+- HTTP mode currently has **no bearer-token auth** — bind only to
+  private networks. It does enforce a required `MCP_ALLOWED_HOSTS`
+  (and optional `MCP_ALLOWED_ORIGINS`) allowlist on `/mcp` as a
+  DNS-rebinding guard (`src/index.ts`) — that closes the "malicious
+  LAN webpage drives tools via the browser" gap, but is not a
+  substitute for real auth. Add a bearer token if ever exposed beyond
+  a trusted network.
+- **Git workflow: commit directly to `main` and push.** This is a
+  personal repo — no PRs, no feature branches, no review gate. Releases
+  are tagged directly on `main` (`git tag -a vX.Y.Z`). The pre-commit
+  hook (gitleaks + PII + author-identity check) is the safety net.
+
+## Testing
+
+Integration tests against a real Plex server live in `tests/`. They
+hit the live API rather than mocking it (per working-style:
+mocked-vs-real divergence is the bigger risk). The suite is gated on
+`PLEX_URL` / `PLEX_TOKEN` env vars — without them the tests are
+skipped, so CI without secrets passes cleanly.
+
+Fixtures (which library section, which show, which item to round-trip
+mark_watched on) are *discovered* at test bootstrap rather than
+hardcoded, so the suite survives a Plex DB rebuild.
+
+Run locally:
+
+```bash
+set -a; . .env; set +a            # load PLEX_URL / PLEX_TOKEN
+npm test                           # one-shot
+npm run test:watch                 # interactive
+```
+
+The mark_watched/unwatched round-trip mutates the user's most recent
+watch — bumping its `lastViewedAt` to "now" because Plex's
+`/:/scrobble` doesn't preserve the original. See
+[docs/PLEX-API.md](docs/PLEX-API.md) for the full gotcha.
+
+## MCP tooling (local workstation)
+
+This repo is registered with two MCP servers for Codex sessions
+opened in this directory:
+
+- **Serena** — user-scoped (available in every project on this machine).
+  Project memories are written under the `plex-mcp` Serena project.
+  Re-onboarding isn't needed; if memories drift, update them with
+  `mcp__serena__write_memory`.
+- **OpenChronicle** — user-scoped HTTP MCP at
+  `http://your-nas:18000/mcp` (v3, unified ASGI; same image and DB
+  serve every project). The legacy `oc mcp serve` stdio form and the
+  host `oc` CLI are both dead — don't try to use them.
+
+OC project lookup is name-based: the `oc-context` skill (run at
+session start) resolves the project for this repo by matching
+`project_list` against the basename of cwd (`plex-mcp`). The OC
+project for this repo is `e27af55d-2ec0-48c7-b72f-adff2014c199`
+(re-created 2026-05-06 after the v3 container DB wipe). Save new
+memories with the `oc-save` skill; recall with `oc-recall`.
+
+If you re-clone the repo on another machine, you'll need the OC HTTP
+MCP registered there (the URL above only works on a host that can
+resolve `your-nas`). Serena will work automatically if it's already
+user-scoped on that machine.

@@ -173,6 +173,26 @@ the work rather than after the fact.
   `@emnapi/*` references, twice.
 - Pre-commit PII scan now covers renamed/copied staged files
   (`--diff-filter=ACMR`, not just `AM`).
+- Network-error messages now surface their real cause (MCP-F08).
+  `sendRequest()`'s catch and `auth.ts`'s OIDC discovery both built their
+  message from `err.message` only — on a real `fetch()` failure that's
+  Node's generic `TypeError: fetch failed`, discarding the actual
+  DNS/connection/TLS reason living in `error.cause`. The MCP SDK's own
+  tool-error conversion reads `error.message` only too, so `cause` would
+  be silently dropped a second time if not folded into the message
+  itself. New `src/errors.ts` `describeTransportError()`, wired into
+  both fetch call sites (`plex.ts`'s single chokepoint, `auth.ts`'s JWKS
+  discovery). Found via a fleet-wide sweep prompted by a live incident
+  in downloader-mcp.
+- `docker-compose.yml`: added `network_mode: bridge`. The NAS's Docker
+  default-address-pool was fully exhausted; this stack's dedicated
+  per-project network (`plex-mcp_default`) was one of many
+  single-container stacks each claiming a slice for a container that
+  has no need for inter-container DNS (Plex is reached via `PLEX_URL`
+  over `host.docker.internal`/LAN, not a container name). Port
+  publishing (`${HOST_PORT:-3001}:3000`) and `extra_hosts`
+  (`host.docker.internal:host-gateway`) both work unchanged under
+  bridge mode.
 
 ### Security
 
