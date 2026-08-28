@@ -11,6 +11,8 @@ the work rather than after the fact.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-28
+
 ### Added
 
 - Opt-in HTTPS on the HTTP transport (`src/tls.ts`): self-managed ECDSA

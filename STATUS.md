@@ -1,6 +1,21 @@
 # Status
 
-**Last updated:** 2026-08-18 (moved the Portainer stack onto the shared
+**Last updated:** 2026-08-28 — **released v0.8.0**, the first tagged
+release since v0.7.1 on 2026-05-17, closing out 74 commits of accumulated
+work: HTTPS on the HTTP transport, OAuth 2.1 protected-resource auth,
+image/poster/log tooling, collections, `plex_rate_item`, section-scoped
+`plex_on_deck`, the MCP-S01 config centralization, the MCP-F08
+transport-error fix, and the bridge-network move. Two breaking changes
+are in this release: the three destructive tools now require a
+`confirm_title` match (MCP-P06), and `HOST_IMAGE_DIR`/`HOST_LOG_DIR` are
+required in `docker-compose.yml` with no relative fallback. This release
+is also the fleet pilot for a proposed release-cadence standard — plex-mcp
+was the only public repo whose tag matched its manifest, and it still sat
+74 commits past its last release, which is the case the standard is meant
+to catch. `CHANGELOG.md`'s `[Unreleased]` section was promoted to
+`[0.8.0]`; `package.json`, `package-lock.json`, and `src/version.ts` were
+bumped together, enforced by `tests/version-sync.test.ts`.
+Previous entry, 2026-08-18: moved the Portainer stack onto the shared
 Docker bridge network — `network_mode: bridge` added to
 `docker-compose.yml`. The NAS's Docker default-address-pool was fully
 exhausted; this stack's dedicated per-project network (`plex-mcp_default`)
