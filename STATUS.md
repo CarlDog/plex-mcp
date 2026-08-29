@@ -1104,10 +1104,10 @@ downloader-mcp.
      worth guessing at for an irreversible delete. Revisit with a
      clearer source (e.g. a DevTools capture of Plex Web actually
      clicking "Empty Trash").
-  5. Section-scoped `plex_on_deck(section_id?)` — `GET
-     /library/sections/{id}/onDeck`, confirmed via the OpenAPI spec,
-     exactly matches the original assumption. Read-only. Not yet
-     shipped.
+  5. ~~Section-scoped `plex_on_deck(section_id?)`~~ — **shipped
+     2026-08-15**. `GET /library/sections/{id}/onDeck`, confirmed via
+     the OpenAPI spec, exactly matched the original assumption.
+     Read-only.
 - **Outstanding audit items now closed by v0.6 + v0.7.** All four of
   the originally-blocked WWE PPV items have a resolution path
   using shipped tools. Pending only operator actions.
