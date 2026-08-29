@@ -1,6 +1,16 @@
 # Status
 
-**Last updated:** 2026-08-29 — `plex_remove_from_continue_watching`
+**Last updated:** 2026-08-29 — implemented an optional direct Tautulli client and
+four read-only `plex_tautulli_*` tools. Disabled, partially configured, and
+unreachable Tautulli states leave existing Plex tools and `/health` unchanged;
+normalized outputs exclude sensitive source fields. All three environment
+variables use MCP-E02 substitution. The suite has 109 passing tests, and build,
+typecheck, lint, format, diff, and Compose checks are clean. The canonical plan
+is linked from
+[docs/TAUTULLI-INTEGRATION.md](docs/TAUTULLI-INTEGRATION.md). Portainer
+configuration, deployment, and live verification remain pending because no
+Tautulli credentials are available in this shell.
+Previous entry, 2026-08-29 — `plex_remove_from_continue_watching`
 shipped, resolving the 2026-08-15 deferral: a live DevTools capture of
 Plex Web itself (via Claude in Chrome, driving the user's own logged-in
 session) revealed the real query param is `ratingKey`, not `key` as the
@@ -1073,8 +1083,8 @@ downloader-mcp.
     assistant to perform even via browser automation; the user was
     asked to capture that one manually if they want it revisited later.
   - New `PlexClient.removeFromContinueWatching()` (`src/plex.ts`) and
-    `plex_remove_from_continue_watching` tool
-    (`src/tools/playback.ts`, `SAFE_IDEMPOTENT_WRITE_ANNOTATIONS`).
+  `plex_remove_from_continue_watching` tool
+  (`src/tools/playback.ts`, `SAFE_IDEMPOTENT_WRITE_ANNOTATIONS`).
   - Tests: `tests/plex.test.ts` gained an `inProgressRatingKey` fixture
     (discovered from `onDeck()`, following the file's existing
     discover-don't-hardcode convention) and two tests — removal
@@ -1095,7 +1105,24 @@ downloader-mcp.
     `prettier --check` and the full live test suite (153/153 passing,
     no flake this run) all clean.
 
+- **Optional direct Tautulli integration implemented (2026-08-29).** Added a
+  repository-local fail-soft client and four always-registered read-only tools:
+  `plex_tautulli_status`, `plex_tautulli_activity`, `plex_tautulli_history`, and
+  `plex_tautulli_watch_time`. Disabled/partial/unreachable states do not affect
+  Plex tools or `/health`; outputs are privacy allowlists, and error paths scrub
+  the query-string API key. All `TAUTULLI_*` values are MCP-E02 Compose
+  substitutions. Network-free verification is green; Portainer configuration,
+  deployment, and live Tautulli checks remain under **Next**.
+
 ## Next
+
+- **Optional Tautulli integration — implemented; live deployment pending.** See
+  [docs/TAUTULLI-INTEGRATION.md](docs/TAUTULLI-INTEGRATION.md) for the canonical
+  cross-repository plan. Code is complete for the repository-local client plus
+  `plex_tautulli_status`, `plex_tautulli_activity`, `plex_tautulli_history`, and
+  `plex_tautulli_watch_time`. Remaining work is to set the URL and API key in
+  Portainer, redeploy, run the opt-in live checks, and smoke-test status and one
+  read tool.
 
 - **ChatGPT Apps SDK alignment — Phases 1–2 done, Phases 3–4 not
   started.** See [docs/CHATGPT-APPS-SDK.md](docs/CHATGPT-APPS-SDK.md)

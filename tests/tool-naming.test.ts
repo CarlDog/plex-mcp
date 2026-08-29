@@ -11,7 +11,7 @@ import { CaptureServer } from "./_test_utils.js";
 
 function captureAll(): CaptureServer {
   const server = new CaptureServer();
-  registerTools(server as never, {} as PlexClient);
+  registerTools(server as never, {} as PlexClient, {} as never);
   return server;
 }
 

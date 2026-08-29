@@ -18,7 +18,7 @@ import { CaptureServer, type CapturedTool } from "./_test_utils.js";
 
 function registerAndFind(plex: PlexClient, toolName: string): CapturedTool {
   const server = new CaptureServer();
-  registerTools(server as never, plex);
+  registerTools(server as never, plex, {} as never);
   const tool = server.tools.find((t) => t.name === toolName);
   if (!tool) throw new Error(`tool not registered: ${toolName}`);
   return tool;

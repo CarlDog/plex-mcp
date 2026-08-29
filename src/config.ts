@@ -17,6 +17,7 @@
 //   container's life) and not worth the churn.
 
 import { log } from "./log.js";
+import { resolveTautulliConfig, type TautulliConfigState } from "./tautulli.js";
 
 function fail(message: string, meta?: Record<string, unknown>): never {
   log.error("startup", message, meta);
@@ -30,6 +31,7 @@ export interface Config {
   allowedHosts: string[];
   allowedOrigins: string[];
   sessionIdleTimeoutMs: number;
+  tautulli: TautulliConfigState;
 }
 
 function loadConfig(): Config {
@@ -92,6 +94,7 @@ function loadConfig(): Config {
     allowedHosts,
     allowedOrigins,
     sessionIdleTimeoutMs,
+    tautulli: resolveTautulliConfig(),
   };
 }
 

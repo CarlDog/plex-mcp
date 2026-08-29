@@ -14,16 +14,18 @@ import { mountMcpRoute } from "./mcp-route.js";
 import { PlexClient } from "./plex.js";
 import { resolveTlsCredentials } from "./tls.js";
 import { registerTools } from "./tools/index.js";
+import { TautulliClient } from "./tautulli.js";
 import { SERVER_VERSION } from "./version.js";
 
 const plex = new PlexClient({ url: config.plexUrl, token: config.plexToken });
+const tautulli = new TautulliClient(config.tautulli);
 
 const INSTRUCTIONS = `MCP server for Plex Media Server. Lets you search libraries, browse recently-added / on-deck / now-playing, fetch full metadata, manage playlists, and mark items watched/unwatched.
 
 Idioms:
 - Every item has a ratingKey (string). Same ID space across movies, shows, episodes, music. Get one from a search/list call, then drill into it with plex_get_item or plex_get_children.
 - plex_search searches across all libraries; plex_browse is section-scoped — call plex_list_libraries first to get section IDs.
-- plex_history is server-wide watch history; plex_now_playing is current streaming sessions only.
+- plex_history is Plex's server-wide history; plex_now_playing is current Plex sessions. The optional plex_tautulli_* tools provide richer Tautulli activity/history/statistics when configured.
 - Mutation tools (playlist create/delete/add/remove, mark watched/unwatched) change server state. Confirm with the user before invoking unless intent is unambiguous.
 
 Auth: a single Plex token, scoped to one user account on the server. Operations affect that account's view.`;
@@ -38,7 +40,7 @@ function createServer(): McpServer {
       instructions: INSTRUCTIONS,
     },
   );
-  registerTools(server, plex);
+  registerTools(server, plex, tautulli);
   return server;
 }
 

@@ -13,6 +13,14 @@ the work rather than after the fact.
 
 ### Added
 
+- Optional direct Tautulli integration with four read-only tools:
+  `plex_tautulli_status`, `plex_tautulli_activity`,
+  `plex_tautulli_history`, and `plex_tautulli_watch_time`. The integration is
+  disabled when `TAUTULLI_URL`/`TAUTULLI_API_KEY` are unset, never participates
+  in `/health`, and normalizes responses through explicit allowlists so
+  Tautulli email, IP, machine-id, and filesystem-path fields cannot escape.
+- Portainer-overridable `TAUTULLI_URL`, `TAUTULLI_API_KEY`, and
+  `TAUTULLI_TIMEOUT_MS` Compose variables under fleet standard MCP-E02.
 - `plex_remove_from_continue_watching(rating_key)` — removes an item
   from the Continue Watching hub without touching its watch progress.
   Resolves a 2026-08-15 deferral: the real request (`PUT

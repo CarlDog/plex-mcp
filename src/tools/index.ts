@@ -12,8 +12,13 @@ import { registerImageTools } from "./images.js";
 import { registerPlaybackTools } from "./playback.js";
 import { registerPlaylistsTools } from "./playlists.js";
 import { registerSessionsTools } from "./sessions.js";
+import { registerTautulliTools, type TautulliToolClient } from "./tautulli.js";
 
-export function registerTools(server: McpServer, plex: PlexClient): void {
+export function registerTools(
+  server: McpServer,
+  plex: PlexClient,
+  tautulli: TautulliToolClient,
+): void {
   registerDiscoveryTools(server, plex);
   registerSessionsTools(server, plex);
   registerPlaybackTools(server, plex);
@@ -22,4 +27,5 @@ export function registerTools(server: McpServer, plex: PlexClient): void {
   registerAdminTools(server, plex);
   registerImageTools(server, plex);
   registerDiagnosticsTools(server, plex);
+  registerTautulliTools(server, tautulli);
 }

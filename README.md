@@ -53,6 +53,15 @@ your Plex libraries.
 | `plex_list_posters` | List every poster candidate for an item (agent-supplied, locally-scanned, previously uploaded), including which one is currently active |
 | `plex_set_poster` | Select an existing poster candidate as the active one, by the candidate's own `poster_rating_key` from `plex_list_posters` |
 | `plex_upload_poster` | Add a new poster from an external URL (Plex fetches it) or a local file under `MCP_IMAGE_SAVE_DIR`. Auto-selects it by default; `select=false` adds it without changing what's displayed |
+| `plex_tautulli_status` | Optional Tautulli configuration and on-demand connectivity status; never affects `/health` |
+| `plex_tautulli_activity` | Normalized current Tautulli sessions with email, IP, machine-id, and file-path fields omitted |
+| `plex_tautulli_history` | Paged, filtered Tautulli watch history with sensitive network/filesystem fields omitted |
+| `plex_tautulli_watch_time` | Library play-count and watch-time totals for selected day windows |
+
+The Tautulli tools are always registered so MCP capability caches stay stable.
+`plex_tautulli_status` reports disabled or incomplete configuration normally;
+the three data tools return a bounded tool error when Tautulli is unavailable.
+They use a direct repository-local client and never participate in `/health`.
 
 ## Configuration
 
@@ -78,6 +87,9 @@ All have working defaults; set only to override.
 | `MCP_LOG_MAX_BYTES` | `52428800` (50 MiB) | Size cap for `plex_download_logs` |
 | `MCP_LOG_FETCH_TIMEOUT_MS` | `120000` (2 min) | Timeout for `plex_download_logs` — separate from `MCP_FETCH_TIMEOUT_MS` since a log ZIP has a different size/latency profile |
 | `MCP_SESSION_IDLE_TIMEOUT_MS` | `3600000` (1 hr) | Evicts an HTTP-mode MCP session after this much inactivity |
+| `TAUTULLI_URL` | unset | Optional Tautulli web root, including any HTTP root. Unset with `TAUTULLI_API_KEY` disables the integration. |
+| `TAUTULLI_API_KEY` | unset | Optional Tautulli API key. Required only when `TAUTULLI_URL` is set; never returned or logged. |
+| `TAUTULLI_TIMEOUT_MS` | `10000` | Timeout for each optional Tautulli request. Tautulli failures do not affect Plex tools or `/health`. |
 
 `LOG_LEVEL`, `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`, and
 `HOST_IMAGE_DIR`/`HOST_LOG_DIR` are covered in their own sections below
@@ -227,7 +239,9 @@ docker compose up
 3. Compose path: `docker-compose.yml`
 4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`,
    `MCP_ALLOWED_HOSTS`, `HOST_IMAGE_DIR`, and `HOST_LOG_DIR` — all
-   **required** (see below); optionally `HOST_PORT`.
+   **required** (see below); optionally set `HOST_PORT` and the Tautulli pair
+   `TAUTULLI_URL`/`TAUTULLI_API_KEY` (`TAUTULLI_TIMEOUT_MS` defaults to
+   `10000`). Leaving both Tautulli values unset disables that integration.
 5. Deploy. Healthcheck reaches green within ~10 seconds.
 
 ### `MCP_ALLOWED_HOSTS` is required in HTTP mode

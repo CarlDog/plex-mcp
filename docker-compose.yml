@@ -11,6 +11,12 @@ services:
       MCP_PORT: "3000"
       PLEX_URL: "${PLEX_URL}"
       PLEX_TOKEN: "${PLEX_TOKEN}"
+      # Optional Tautulli statistics integration. Empty URL/key disables all
+      # outbound Tautulli calls while keeping the four plex_tautulli_* tools
+      # registered with clear availability diagnostics.
+      TAUTULLI_URL: "${TAUTULLI_URL:-}"
+      TAUTULLI_API_KEY: "${TAUTULLI_API_KEY:-}"
+      TAUTULLI_TIMEOUT_MS: "${TAUTULLI_TIMEOUT_MS:-10000}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
       # Required in HTTP mode (MCP-F03): comma-separated Host header values
       # this server accepts on /mcp. Must include whatever host:port a

@@ -1,7 +1,7 @@
 // Shared test double for tool-registration tests (annotation + naming
 // enforcement, MCP-T01/MCP-T02; destructive-tool gate wiring, MCP-P06).
 // Captures every server.registerTool(...) call made by
-// registerTools(server, plex) without needing a real MCP transport or a
+// registerTools(server, plex, tautulli) without needing a real MCP transport or a
 // live Plex connection — registration itself never invokes a tool's
 // handler, only records its shape. `handler` is captured too so a wiring
 // test can invoke a specific tool directly against a stubbed PlexClient.

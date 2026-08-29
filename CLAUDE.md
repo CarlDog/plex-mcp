@@ -31,12 +31,15 @@ what's next.
   self-executes on import, so nothing in it was reachable without booting
   a server. Covered by `tests/mcp-route.test.ts`.
 - `src/plex.ts` — Plex HTTP API client.
+- `src/tautulli.ts` — optional direct Tautulli HTTP client, fail-soft config,
+  normalized privacy-allowlisted response types.
 - `src/log.ts` — small structured logger (stderr, level-gated via
   `LOG_LEVEL` env var). See README for format and levels.
 - `src/tools/` — tool registrations split per domain
   (`discovery.ts`, `sessions.ts`, `playback.ts`, `playlists.ts`,
-  `hubs.ts`, `admin.ts`, `images.ts`, `diagnostics.ts`). `index.ts`
-  orchestrates via `registerTools(server, plex)`; `helpers.ts` holds
+  `hubs.ts`, `admin.ts`, `images.ts`, `diagnostics.ts`, `tautulli.ts`).
+  `index.ts` orchestrates via `registerTools(server, plex, tautulli)`;
+  `helpers.ts` holds
   shared utilities (`asText`, `withLogging`).
 - `Dockerfile` — multi-stage build for the runtime image.
 - `docker-compose.yml` — Compose/Portainer deployment using HTTP transport.
