@@ -380,6 +380,35 @@ on-deck entry. Don't build tooling that assumes every item in this
 response carries `librarySectionID` — check for its presence before
 relying on it, the way `tests/plex.test.ts`'s on-deck test does.
 
+### `removeFromContinueWatching`'s real param is `ratingKey`, not `key` — the community OpenAPI spec had it wrong
+
+`LukasParke/plex-api-spec` documents `PUT
+/actions/removeFromContinueWatching?key=...`, and a 2026-08-15 attempt
+against that exact shape returned an identical generic `400` for every
+value tried (bare ratingKey, full metadata path encoded and raw,
+with/without `identifier=`, with/without client-identity headers) — no
+python-plexapi coverage existed to cross-check against, so the tool was
+deferred rather than shipped against an unconfirmed guess.
+
+Resolved 2026-08-29 by capturing the request Plex Web itself sends when
+you click "Remove from Continue Watching" (Chrome DevTools Network tab,
+via Claude in Chrome + `read_network_requests`, driving the user's own
+logged-in session): the real call is `PUT
+/actions/removeFromContinueWatching?ratingKey={ratingKey}` — no
+`identifier=`, no client-identity headers. `key` vs `ratingKey` was the
+entire bug; every other guessed detail (method, no identifier) had
+already been right. Verified the item's `viewOffset`/`lastViewedAt` are
+untouched by the call — it only flips a hidden-from-the-hub flag that
+clears again once the item is resumed.
+
+**General lesson**: when a community-maintained spec's documented shape
+gets a blanket rejection with no working variant and no second source
+to cross-check, a live capture of the real first-party client actually
+performing the action is more reliable than guessing further permutations
+of the documented shape. Claude in Chrome (driving the user's already-
+authenticated browser) plus its network-request inspection is a
+practical way to get that capture without needing separate credentials.
+
 ## Endpoints currently used
 
 | Tool                  | Endpoint                                                               | Notes                                                                  |
@@ -396,6 +425,7 @@ relying on it, the way `tests/plex.test.ts`'s on-deck test does.
 | `plex_mark_watched`   | `GET /:/scrobble?key=...&identifier=com.plexapp.plugins.library`       | Empty 200 — use `requestNoContent`                                     |
 | `plex_mark_unwatched` | `GET /:/unscrobble?key=...&identifier=com.plexapp.plugins.library`     | Empty 200                                                              |
 | `plex_rate_item`      | `PUT /:/rate?key=...&identifier=com.plexapp.plugins.library&rating=N` | Empty 200 — 0-10 scale; omitting `rating` sends `-1` to clear it       |
+| `plex_remove_from_continue_watching` | `PUT /actions/removeFromContinueWatching?ratingKey=...`  | Empty 200 — param is `ratingKey`, not `key`; no `identifier=` needed; confirmed via live DevTools capture, not docs |
 | `plex_list_playlists` | `GET /playlists`                                                       | Includes both regular and smart playlists                              |
 | `plex_get_playlist_items` | `GET /playlists/{id}/items`                                        | Each item has `playlistItemID` (≠ `ratingKey`)                         |
 | `plex_create_playlist` | `POST /playlists?type=&title=&smart=0&uri=server://...`               | Requires at least one initial item via `uri=`                          |
@@ -435,18 +465,18 @@ independent OpenAPI spec
 which contract-tests against real Plex servers) — 4 of the 5 rows
 that carried a "✓ pkkid" mark below don't actually appear in
 python-plexapi's source at all. Corrected in place; see
-`plex_rate_item`/`plex_on_deck` in "Endpoints currently used" above
-for the two that shipped, and STATUS.md's Next section for the
-drop/defer reasoning on the other three (one dropped outright, two
-deferred — one for an ambiguous spec, one for a live 400 with no
-working parameter shape found). Shapes without any mark are still
-speculative.
+`plex_rate_item`/`plex_on_deck`/`plex_remove_from_continue_watching`
+in "Endpoints currently used" above for the three that shipped (the
+last one only after a follow-up live-capture investigation — see its
+gotcha above), and STATUS.md's Next section for the drop/defer
+reasoning on the remaining two (one dropped outright, one still
+deferred for a genuinely ambiguous spec). Shapes without any mark are
+still speculative.
 
 | Capability                              | Endpoint(s)                                                                              | Risk                     |
 | --------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ |
 | Smart playlists (filter expressions)    | `POST /playlists?type=&smart=1&uri=` (filter shape via `library:///` URI)                | Medium (complex shape)   |
 | Update playback timeline — declined     | `POST /:/timeline?key=&ratingKey=&state=&time=&duration=...` (confirmed via plex-api-spec; not in python-plexapi). Real shape is a live-playback-session reporter (~10 required client-identity headers, meant to be called every 10-20s by an actual player), not a one-shot resume-position setter as originally assumed | Declined — synthetic fake-session call, low value vs. `plex_mark_watched` |
-| Remove from Continue Watching — deferred | `PUT /actions/removeFromContinueWatching?key=...` per plex-api-spec, but every reasonable `key` value tried live (2026-08-15) — bare ratingKey, full metadata path (encoded and raw), with/without `identifier=`, with/without client-identity headers — returned an identical generic `400`. `POST` gave `404` (so `PUT` is at least routed). No python-plexapi coverage to cross-check against | Deferred — real shape still unknown; revisit with a DevTools capture of Plex Web actually doing this |
 | Empty section trash — deferred          | `PUT`/`POST`/`GET /library/sections/{id}/emptyTrash` (confirmed to exist via plex-api-spec, but the spec itself lists all 3 HTTP methods claiming the same effect, no clear canonical one) | Deferred — irreversible delete + genuinely ambiguous method, not worth guessing at |
 | Analyze section ✓ pkkid                 | `PUT /library/sections/{id}/analyze`                                                     | Medium (server load)     |
 | Continue Watching hub explicit ✓ pkkid  | `GET /hubs/continueWatching/items`                                                       | Low                      |
@@ -674,6 +704,16 @@ operation. Match unless noted below.
 family.
 
 ### Endpoints pkkid has that we deferred — confirmed worth shipping
+
+**Superseded 2026-08-15, kept for history — see the correction at the
+top of "Endpoints we haven't built yet."** This section's claim that
+pkkid's source documents the exact shape turned out false for
+`removeFromContinueWatching` (no `video.py` support for it exists;
+the real shape was only found via a live DevTools capture, not
+pkkid) and for timeline/progress (`base.py` doesn't cover it either —
+the real endpoint is a live-playback-session reporter, declined
+outright). Only the rating/played-unplayed mixins panned out as
+originally described.
 
 The "Endpoints we haven't built yet" entries marked **✓ pkkid**
 above are no longer speculative — pkkid's source documents the

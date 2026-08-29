@@ -28,6 +28,7 @@ your Plex libraries.
 | `plex_mark_watched` | Mark an item as watched (reversible) |
 | `plex_mark_unwatched` | Mark an item as unwatched (reversible) |
 | `plex_rate_item` | Set an item's 0-10 user star rating; omit `rating` to clear it back to unrated |
+| `plex_remove_from_continue_watching` | Remove an item from the Continue Watching hub without touching its watch progress; reappears automatically once resumed |
 | `plex_list_playlists` | List all playlists (regular + smart) |
 | `plex_get_playlist_items` | List a playlist's contents |
 | `plex_create_playlist` | Create a regular playlist seeded with one item |

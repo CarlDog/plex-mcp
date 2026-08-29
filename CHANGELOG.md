@@ -11,6 +11,15 @@ the work rather than after the fact.
 
 ## [Unreleased]
 
+### Added
+
+- `plex_remove_from_continue_watching(rating_key)` — removes an item
+  from the Continue Watching hub without touching its watch progress.
+  Resolves a 2026-08-15 deferral: the real request (`PUT
+  /actions/removeFromContinueWatching?ratingKey=...`) was found by
+  capturing Plex Web's own network traffic, since the community OpenAPI
+  spec documented the wrong query param (`key` instead of `ratingKey`).
+
 ### Changed
 
 - **Package renamed to `@carldog/plex-mcp`.** The unscoped name `plex-mcp`

@@ -1,6 +1,12 @@
 # Status
 
-**Last updated:** 2026-08-28 — **released v0.8.0**, the first tagged
+**Last updated:** 2026-08-29 — `plex_remove_from_continue_watching`
+shipped, resolving the 2026-08-15 deferral: a live DevTools capture of
+Plex Web itself (via Claude in Chrome, driving the user's own logged-in
+session) revealed the real query param is `ratingKey`, not `key` as the
+community OpenAPI spec documented — that one-word mismatch was the
+entire cause of every earlier `400`. See "Done" below for full detail.
+Previous entry, 2026-08-28: **released v0.8.0**, the first tagged
 release since v0.7.1 on 2026-05-17, closing out 74 commits of accumulated
 work: HTTPS on the HTTP transport, OAuth 2.1 protected-resource auth,
 image/poster/log tooling, collections, `plex_rate_item`, section-scoped
@@ -1035,6 +1041,60 @@ downloader-mcp.
     tool calls keep working, no auth-related regression) is the last
     step of this feature before it's considered fully shipped.
 
+- **`plex_remove_from_continue_watching(rating_key)` shipped, resolving
+  the 2026-08-15 deferral (2026-08-29).** The earlier attempt was
+  implemented against `LukasParke/plex-api-spec`'s documented shape
+  (`PUT /actions/removeFromContinueWatching?key=`) and got an identical
+  generic `400` for every parameter variant tried against a real item —
+  no python-plexapi coverage existed to cross-check against, so it was
+  deferred rather than shipped on a guess (see the old Next-section
+  entry, now struck through, for the full list of what was tried).
+  - **Resolved via a live DevTools capture of Plex Web itself**, using
+    Claude in Chrome (the user's real, already-authenticated browser
+    session — no separate credentials needed) plus its
+    `read_network_requests` inspection: clicked "Remove from Continue
+    Watching" on a real in-progress item (Unsolved Mysteries, Episode
+    #9, rk 213958) and captured the actual outgoing request. The bug
+    was exactly one thing — the real query param is **`ratingKey`**,
+    not `key` as the OpenAPI spec documents it. No `identifier=` param,
+    no client-identity headers needed; every other guessed detail
+    (method, no identifier) had already been right in the original
+    attempt.
+  - Verified via `plex_get_item` before/after the real capture: the
+    item's `viewOffset` (399000) and `lastViewedAt` were completely
+    unchanged by the removal — it only flips a hidden-from-the-hub
+    flag, confirmed visually gone from the Continue Watching row on
+    Plex Web's home screen afterward. This is not restorable via any
+    API call (Plex exposes no "add back to Continue Watching"
+    endpoint), but it's self-healing: the item reappears the next time
+    it's actually resumed in any client. Deliberately did *not* attempt
+    the same technique for `plex_empty_section_trash` — that's a
+    genuinely irreversible delete, which is off-limits for the
+    assistant to perform even via browser automation; the user was
+    asked to capture that one manually if they want it revisited later.
+  - New `PlexClient.removeFromContinueWatching()` (`src/plex.ts`) and
+    `plex_remove_from_continue_watching` tool
+    (`src/tools/playback.ts`, `SAFE_IDEMPOTENT_WRITE_ANNOTATIONS`).
+  - Tests: `tests/plex.test.ts` gained an `inProgressRatingKey` fixture
+    (discovered from `onDeck()`, following the file's existing
+    discover-don't-hardcode convention) and two tests — removal
+    leaves `viewOffset`/`lastViewedAt` untouched, and calling it again
+    on an already-removed item doesn't throw. No restore step is
+    possible (see above), so this is documented as a permanent,
+    self-healing side effect in the file's top-of-file SIDE EFFECT
+    comment block, alongside the existing mark_watched-round-trip one.
+  - `docs/PLEX-API.md` gained a new gotcha explaining the `key` vs
+    `ratingKey` bug and the general lesson (a live capture of the
+    real first-party client beats guessing further permutations of an
+    unreliable community spec), a new "Endpoints currently used" row,
+    removal of the now-shipped row from "Endpoints we haven't built
+    yet," and a correction note on the now-stale "Endpoints pkkid has
+    that we deferred" section (which had wrongly claimed pkkid's
+    `video.py` documents this endpoint's shape).
+  - Verified: `npm run typecheck` / `npm run build` / `eslint` /
+    `prettier --check` and the full live test suite (153/153 passing,
+    no flake this run) all clean.
+
 ## Next
 
 - **ChatGPT Apps SDK alignment — Phases 1–2 done, Phases 3–4 not
@@ -1070,23 +1130,13 @@ downloader-mcp.
      (Plex displays out of 5 stars). Omitting `rating` clears it (Plex's
      `rating=-1` convention). Round-trip tested live against a real
      rated item (Arcane, `userRating: 10.0`), restored after.
-  2. ~~`plex_remove_from_continue_watching(rating_key)`~~ — **attempted
-     and deferred 2026-08-15**. Implemented against the OpenAPI spec's
-     shape (`PUT /actions/removeFromContinueWatching?key=`), then live-
-     tested against a real in-progress item (rk 213958, `viewOffset:
-     399999`, present on both `/library/onDeck` and
-     `/hubs/continueWatching/items`) before writing tests or shipping —
-     every reasonable `key` value tried (bare ratingKey, full metadata
-     path both URL-encoded and raw, with/without
-     `identifier=com.plexapp.plugins.library`, with/without
-     client-identity headers) returned an identical generic `400 Bad
-     Request`. `POST` instead of `PUT` gave `404` (confirming `PUT` is
-     at least routed correctly). No python-plexapi coverage to
-     cross-check the real shape against. Reverted cleanly — confirmed
-     the test item's `viewOffset`/`lastViewedAt`/on-deck presence were
-     completely unaffected by the failed attempts. Revisit with a
-     clearer source (DevTools capture of Plex Web actually clicking
-     "Remove from Continue Watching").
+  2. ~~`plex_remove_from_continue_watching(rating_key)`~~ — **shipped
+     2026-08-29**, after being attempted and deferred 2026-08-15 (see
+     "Done" below for the full resolution). The 2026-08-15 attempt
+     against the OpenAPI spec's documented shape (`key=`) got an
+     identical generic `400` for every parameter variant tried; the
+     real bug was just the parameter name — Plex Web itself sends
+     `ratingKey=`, confirmed via a live DevTools capture.
   3. ~~`plex_update_timeline`~~ — **dropped 2026-08-15**. The real
      endpoint is `POST /:/timeline`, not `GET`, and it's a live-playback-
      session reporter (full `state: stopped/buffering/playing/paused`

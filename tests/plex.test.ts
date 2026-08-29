@@ -17,6 +17,14 @@
 // overwrites `lastViewedAt` to "now" on every call, so the original
 // timestamp of that watch is bumped by ~seconds. See
 // `docs/PLEX-API.md` for the full gotcha.
+//
+// SIDE EFFECT: the removeFromContinueWatching test permanently drops
+// the first on-deck item off the Continue Watching hub. There's no API
+// to undo this — unlike rate/mark_watched, Plex exposes no "add back to
+// Continue Watching" call. The item's viewOffset/lastViewedAt are
+// unaffected, and it reappears on its own the next time it's resumed
+// in any client, so this is a cosmetic, self-healing side effect, not
+// data loss.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PlexClient } from "../src/plex.js";
 
@@ -35,6 +43,7 @@ interface Fixtures {
   collectionSectionId: string | null;
   collectionRatingKey: string | null;
   collectionTitle: string | null;
+  inProgressRatingKey: string | null;
 }
 
 describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
@@ -69,6 +78,14 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     const recentEntry = historyResult.items[0] as
       { ratingKey: string } | undefined;
 
+    // For the removeFromContinueWatching test below: any item Plex
+    // currently considers "in progress" works, since the test only
+    // asserts the hub-visibility flag flips without touching progress.
+    const onDeckItems = (await client.onDeck()) as Array<{
+      ratingKey: string;
+    }>;
+    const inProgressItem = onDeckItems[0];
+
     // Not every section has collections, and which one does varies by
     // library — try each until one has at least one, rather than
     // assuming a specific section. Nullable in Fixtures; tests that
@@ -97,6 +114,7 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       collectionSectionId,
       collectionRatingKey,
       collectionTitle,
+      inProgressRatingKey: inProgressItem?.ratingKey ?? null,
     };
   });
 
@@ -973,6 +991,37 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
         userRating?: number;
       };
       expect(after.userRating).toBe(originalRating);
+    });
+  });
+
+  describe("removeFromContinueWatching", () => {
+    it("removes an in-progress item from the hub without touching its progress", async () => {
+      if (!fixtures.inProgressRatingKey) {
+        // No on-deck items on this server; nothing to exercise.
+        console.warn("[skip] no on-deck items; removal not exercised");
+        return;
+      }
+      const targetKey = fixtures.inProgressRatingKey;
+      const before = (await client.getItem(targetKey)) as {
+        viewOffset?: number;
+        lastViewedAt?: number;
+      };
+
+      await client.removeFromContinueWatching(targetKey);
+
+      const after = (await client.getItem(targetKey)) as {
+        viewOffset?: number;
+        lastViewedAt?: number;
+      };
+      expect(after.viewOffset).toBe(before.viewOffset);
+      expect(after.lastViewedAt).toBe(before.lastViewedAt);
+    });
+
+    it("is idempotent when called on an already-removed item", async () => {
+      if (!fixtures.inProgressRatingKey) return;
+      await expect(
+        client.removeFromContinueWatching(fixtures.inProgressRatingKey),
+      ).resolves.not.toThrow();
     });
   });
 

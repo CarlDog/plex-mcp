@@ -80,4 +80,28 @@ export function registerPlaybackTools(
       return asText({ rating_key, rating: rating ?? null });
     }),
   );
+
+  server.registerTool(
+    "plex_remove_from_continue_watching",
+    {
+      title: "Remove Plex Item From Continue Watching",
+      description:
+        "Remove an item from the Continue Watching hub without affecting its watch progress (viewOffset/lastViewedAt are untouched). The item reappears automatically the next time it's resumed. Safe to call on an item that's already off the hub — it's a no-op.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe(
+            "The Plex rating key of the item to remove from Continue Watching",
+          ),
+      },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
+    },
+    withLogging(
+      "plex_remove_from_continue_watching",
+      async ({ rating_key }) => {
+        await plex.removeFromContinueWatching(rating_key);
+        return asText({ removed_from_continue_watching: rating_key });
+      },
+    ),
+  );
 }

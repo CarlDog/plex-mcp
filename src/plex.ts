@@ -721,6 +721,27 @@ export class PlexClient {
   }
 
   /**
+   * Remove an item from the Continue Watching hub without touching its
+   * watch progress. `PUT /actions/removeFromContinueWatching?ratingKey=
+   * {ratingKey}` — captured live from Plex Web itself (DevTools network
+   * capture, 2026-08-29), not from docs: the real param is `ratingKey`,
+   * not `key` as `LukasParke/plex-api-spec` documents it (that mismatch
+   * is exactly why an earlier attempt against the documented shape got a
+   * blanket 400 no matter what was tried). No `identifier=` param and no
+   * client-identity headers needed — confirmed by the capture. Verified
+   * the item's `viewOffset`/`lastViewedAt` are unaffected; this only
+   * flips a "hidden from Continue Watching" flag that clears again the
+   * next time the item is resumed. Empty 200 response.
+   */
+  async removeFromContinueWatching(ratingKey: string): Promise<void> {
+    await this.requestNoContent(
+      "/actions/removeFromContinueWatching",
+      { ratingKey },
+      "PUT",
+    );
+  }
+
+  /**
    * Tell Plex to re-pull metadata for an item from its currently-bound
    * agent. Useful when poster/summary/etc. are stale, or after fixing
    * a match. Empty 200 response — uses requestNoContent.
