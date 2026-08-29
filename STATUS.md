@@ -1357,20 +1357,14 @@ None active. Decisions made during scaffolding:
   `tests/mcp-route.test.ts` was written clean under that config and
   contributes no new errors.
 
-- **CLAUDE.md's "When to add a `tools/` layer" section is stale (found
-  2026-08-12).** It says "Today the structure is flat: `src/plex.ts`
-  holds the API client and `src/index.ts` registers tools inline" and
-  describes the split as a future trigger — but the split happened long
-  ago (the v0.2.5-era `src/tools/` refactor, recorded in "Done" above),
-  and the Layout section immediately above it correctly lists
-  `src/tools/`. The two sections contradict each other. Either rewrite
-  it as a record of the decision already taken or delete it; leaving it
-  reads as current guidance and will mislead.
-
-- **`brace-expansion` high-severity advisory (GHSA-rgw5-rvv9-x895, DoS
-  via unbounded intermediate arrays) reported by `npm audit`.** Dev-only
-  — it enters through the eslint chain, not runtime deps, so it does not
-  reach the shipped image. Present in downloader-mcp too, so treat it as
-  a fleet-wide dev-chain bump rather than a per-repo fix. Note this
-  supersedes the "npm audit now reports 0 vulnerabilities" claim in the
-  2026-07-29 dependency entry above — the advisory postdates it.
+- **`brace-expansion` and `nanoid` high-severity advisories reported by
+  `npm audit`** (`GHSA-rgw5-rvv9-x895` — DoS via unbounded intermediate
+  arrays; `GHSA-2v37-7h3g-55p8` — indefinite loop on a zero-size custom
+  generator). Both dev-only: `brace-expansion` enters through the eslint
+  chain, `nanoid` through `vitest → vite → postcss → nanoid` (traced via
+  `npm ls nanoid` during the 2026-08-16 auth work) — neither reaches the
+  shipped runtime image. `brace-expansion` is present in downloader-mcp
+  too, so treat both as fleet-wide dev-chain bumps rather than a
+  per-repo fix. Note this supersedes the "npm audit now reports 0
+  vulnerabilities" claim in the 2026-07-29 dependency entry above — both
+  advisories postdate it.
