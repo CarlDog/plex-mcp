@@ -222,12 +222,20 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     const fullMedia = (full?.Media as Array<Record<string, unknown>>) ?? [];
     const minMedia = (minimal?.Media as Array<Record<string, unknown>>) ?? [];
     if (fullMedia.length === 0 || minMedia.length === 0) return;
+    type SubtitleStream = {
+      id?: number;
+      streamType?: number;
+      title?: string;
+      displayTitle?: string;
+      extendedDisplayTitle?: string;
+      hearingImpaired?: unknown;
+    };
     const fullStreams =
       ((fullMedia[0]?.Part as Array<Record<string, unknown>>)?.[0]
-        ?.Stream as Array<{ streamType?: number }>) ?? [];
+        ?.Stream as SubtitleStream[]) ?? [];
     const minStreams =
       ((minMedia[0]?.Part as Array<Record<string, unknown>>)?.[0]
-        ?.Stream as Array<{ streamType?: number }>) ?? [];
+        ?.Stream as SubtitleStream[]) ?? [];
     // Every surviving stream must be a subtitle track...
     expect(minStreams.every((s) => s.streamType === 3)).toBe(true);
     // ...and every subtitle track from the full response must survive
@@ -237,6 +245,30 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       (s) => s.streamType === 3,
     ).length;
     expect(minStreams.length).toBe(fullSubtitleCount);
+    // Current Plex builds mark SDH in title/display metadata rather than
+    // a native hearingImpaired field. Minimal mode provides the stable
+    // boolean it advertises, while preserving a native boolean if a
+    // future/server-specific payload supplies one.
+    for (const stream of minStreams) {
+      expect(typeof stream.hearingImpaired).toBe("boolean");
+      const original = fullStreams.find(
+        (candidate) => candidate.id === stream.id,
+      );
+      const labels = [
+        original?.title,
+        original?.displayTitle,
+        original?.extendedDisplayTitle,
+      ];
+      const expected =
+        typeof original?.hearingImpaired === "boolean"
+          ? original.hearingImpaired
+          : labels.some(
+              (label) =>
+                typeof label === "string" &&
+                /\b(?:sdh|hearing[\s-]?impaired)\b/i.test(label),
+            );
+      expect(stream.hearingImpaired).toBe(expected);
+    }
   });
 
   it("getItem with explicit fields returns only those keys", async () => {

@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describeTransportError } from "./errors.js";
 import { log } from "./log.js";
+import { annotateSubtitleStream } from "./subtitle.js";
 
 export interface PlexConfig {
   url: string;
@@ -492,9 +493,11 @@ export class PlexClient {
     // cosmetic. The kept fields cover the operational use cases (file
     // path, GUID, locked-field state, title/year/edition, viewed
     // state) plus subtitle track discovery (kept, not dropped — see
-    // below): language/codec/id and the hearingImpaired (SDH) flag are
-    // cheap and useful, unlike the audio/video entries' per-frame
-    // codec detail that's the actual bulk cost.
+    // below): language/codec/id and a normalized hearingImpaired flag
+    // are cheap and useful, unlike the audio/video entries' per-frame
+    // codec detail that's the actual bulk cost. Current Plex payloads
+    // mark SDH in title/display metadata rather than a native boolean,
+    // so minimal mode derives the stable field explicitly.
     if (options.minimal) {
       const DROP_TOP_LEVEL = new Set([
         "Role",
@@ -525,9 +528,9 @@ export class PlexClient {
                     const trimmedPart: Record<string, unknown> = {};
                     for (const [pk, pv] of Object.entries(part)) {
                       if (pk === "Stream") {
-                        trimmedPart[pk] = (
-                          pv as Array<Record<string, unknown>>
-                        ).filter((s) => s.streamType === SUBTITLE_STREAM_TYPE);
+                        trimmedPart[pk] = (pv as Array<Record<string, unknown>>)
+                          .filter((s) => s.streamType === SUBTITLE_STREAM_TYPE)
+                          .map(annotateSubtitleStream);
                         continue;
                       }
                       trimmedPart[pk] = pv;

@@ -728,10 +728,14 @@ downloader-mcp.
   `SubtitleStream.STREAMTYPE` class attribute and a live
   `plex_now_playing` capture) while still dropping the audio/video
   entries that were the actual bulk of minimal mode's token savings.
-  Confirmed real field name for the SDH flag: `hearingImpaired` (not
-  previously known). Verified live with a dedicated test asserting both
-  directions — no non-subtitle entries survive, and no subtitle entries
-  are lost, cross-checked against the full response's actual count.
+  **Field contract corrected 2026-08-30 after dogfooding re-verification:**
+  current Plex payloads do not provide a native `hearingImpaired` field;
+  the observed SDH marker is `title: "SDH"`. Minimal mode now always adds a
+  plex-mcp-normalized `hearingImpaired` boolean, preserving a native boolean
+  if a server supplies one and otherwise deriving it from standalone `SDH`
+  or `hearing impaired` title/display markers. Explicit `fields` projection
+  stays raw and adds no derived field. Tests still assert both stream-filter
+  directions and now cover the normalized metadata contract independently.
   **Subtitle content (actual dialogue text) fetch is declined, not just
   deferred** — checked python-plexapi directly and found zero methods
   anywhere in the library that read back subtitle text; the only
