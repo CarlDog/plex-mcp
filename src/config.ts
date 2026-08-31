@@ -74,7 +74,7 @@ function loadConfig(): Config {
 
   if (port && allowedHosts.length === 0) {
     fail(
-      "MCP_ALLOWED_HOSTS is required in HTTP mode: comma-separated Host header values this server accepts on /mcp (e.g. 'your-nas:3001'). Defends against DNS rebinding — see docker-deployments.md rule #8.",
+      "MCP_ALLOWED_HOSTS is required in HTTP mode: comma-separated Host header hostnames this server accepts on /mcp (e.g. 'your-nas'; ports are ignored if included). Defends against DNS rebinding — see docker-deployments.md rule #8.",
     );
   }
 
@@ -83,9 +83,12 @@ function loadConfig(): Config {
   // client that disappears uncleanly — crash, network drop, laptop
   // closed mid-session — leaves its transport (and session-id map
   // entry) resident forever in this long-running container.
+  //
+  // Var renamed from MCP_SESSION_IDLE_TIMEOUT_MS (default was 1h) to
+  // MCP_SESSION_IDLE_MS (default 30m) 2026-08-30 to match every other
+  // fleet MCP server's name and default for the same concept.
   const sessionIdleTimeoutMs =
-    Number.parseInt(process.env.MCP_SESSION_IDLE_TIMEOUT_MS ?? "", 10) ||
-    3_600_000;
+    Number.parseInt(process.env.MCP_SESSION_IDLE_MS ?? "", 10) || 1_800_000;
 
   return {
     plexUrl: plexUrl!,

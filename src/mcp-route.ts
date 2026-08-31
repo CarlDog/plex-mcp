@@ -8,10 +8,20 @@
 // by hand against a running build. Behavior is unchanged from the inline
 // version; see mcp-route.test.ts for what is now pinned.
 //
-// Deliberately NOT sharing the fleet-canonical src/shared/http-transport.ts:
-// that module answers with a bare `{ error }` body and enforces a hostname-only
-// allowlist, where this route answers in JSON-RPC envelopes and matches the
-// full `host:port`. Those are security-visible differences, not style.
+// Still NOT sharing the fleet-canonical src/shared/http-transport.ts wholesale
+// (this route keeps JSON-RPC error envelopes, not the shared module's bare
+// `{ error }` body — a real response-shape difference, and this repo predates
+// the shared module per STATUS.md MCP-S01). Host matching, however, is now
+// aligned with the rest of the fleet: hostname-only, port-independent, via the
+// same URL-authority parser plex-companion's fix (2026-08-30) introduced for
+// bracketed IPv6. The exact-match-on-host:port contract this used to pin was a
+// holdover from before that convention existed, not a stronger security
+// posture — a DNS-rebinding attacker's Host header port is pinned by the real
+// TCP connection (the browser must dial the actual published port to reach
+// this socket at all), and an attacker who can already reach the port can
+// trivially send the right one anyway. The allowlist defends hostnames, not
+// ports. Allowlist entries may still carry a `host:port` form (the port is
+// simply ignored) so an old-style deployed value keeps working unchanged.
 
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -30,9 +40,12 @@ export interface McpRouteOptions {
    */
   createServer: () => McpServer;
   /**
-   * Exact `Host` header values accepted on this route, including the port
-   * (e.g. `your-nas:3001`). Empty rejects everything; config.ts refuses to
-   * start HTTP mode without it, so that state is unreachable in production.
+   * `Host` header hostnames accepted on this route, matched case-insensitively
+   * and independent of port (e.g. `your-nas`; bracketed IPv6 like `[::1]` is
+   * supported). A `host:port` entry also works — the port is ignored — so an
+   * old-style deployed value keeps matching unchanged. Empty rejects
+   * everything; config.ts refuses to start HTTP mode without it, so that
+   * state is unreachable in production.
    */
   allowedHosts: string[];
   /**
@@ -70,6 +83,35 @@ export interface McpRouteOptions {
  * Returns a dispose() that clears the sweep timer and closes live sessions, so
  * tests and graceful shutdown don't leak handles.
  */
+/**
+ * Extract the hostname portion of a `Host`-header-style authority string,
+ * independent of any port suffix. Uses URL parsing (not a colon-split) so
+ * bracketed IPv6 (`[::1]:3009`) resolves to `[::1]`, not the mangled `[` a
+ * naive split produces — see plex-companion's 2026-08-30 IPv6 fix, which this
+ * mirrors. Returns undefined for anything that isn't a bare authority (a
+ * userinfo, path, query, or fragment component means the header was not a
+ * plain host[:port] value).
+ */
+export function hostnameFromAuthority(
+  value: string | undefined,
+): string | undefined {
+  try {
+    const authority = new URL(`http://${value ?? ""}`);
+    if (
+      authority.username ||
+      authority.password ||
+      authority.pathname !== "/" ||
+      authority.search ||
+      authority.hash
+    ) {
+      return undefined;
+    }
+    return authority.hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
 export function mountMcpRoute(
   app: Express,
   path: string,
@@ -78,14 +120,24 @@ export function mountMcpRoute(
   const transports: Record<string, StreamableHTTPServerTransport> = {};
   const sessionLastActivity: Record<string, number> = {};
 
+  // Normalized once at mount time, not per-request: strips a port suffix off
+  // each configured entry too, so a deployed value that still says
+  // `your-nas:3001` (the pre-alignment format) keeps matching without an env
+  // change.
+  const normalizedAllowedHosts = opts.allowedHosts.map(
+    (h) => hostnameFromAuthority(h) ?? h.toLowerCase(),
+  );
+
   function checkHostAndOrigin(
     req: Request,
     res: Response,
     next: () => void,
   ): void {
-    const host = req.headers.host;
-    if (!host || !opts.allowedHosts.includes(host)) {
-      log.warn("transport", "rejected: disallowed Host header", { host });
+    const host = hostnameFromAuthority(req.headers.host);
+    if (!host || !normalizedAllowedHosts.includes(host)) {
+      log.warn("transport", "rejected: disallowed Host header", {
+        host: req.headers.host,
+      });
       res.status(421).json({ error: "Invalid Host header" });
       return;
     }

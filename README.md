@@ -87,7 +87,7 @@ All have working defaults; set only to override.
 | `MCP_LOG_MAX_BYTES` | `52428800` (50 MiB) | Size cap for `plex_download_logs` |
 | `MCP_LOG_FETCH_TIMEOUT_MS` | `120000` (2 min) | Timeout for `plex_download_logs` — separate from `MCP_FETCH_TIMEOUT_MS` since a log ZIP has a different size/latency profile |
 | `MCP_PLEX_LOG_SOURCE_DIR` | `/plex-logs` | In-container read-only directory containing `Plex Media Server.log` for 5xx/transport fallback |
-| `MCP_SESSION_IDLE_TIMEOUT_MS` | `3600000` (1 hr) | Evicts an HTTP-mode MCP session after this much inactivity |
+| `MCP_SESSION_IDLE_MS` | `1800000` (30 min) | Evicts an HTTP-mode MCP session after this much inactivity |
 | `TAUTULLI_URL` | unset | Optional Tautulli web root, including any HTTP root. Unset with `TAUTULLI_API_KEY` disables the integration. |
 | `TAUTULLI_API_KEY` | unset | Optional Tautulli API key. Required only when `TAUTULLI_URL` is set; never returned or logged. |
 | `TAUTULLI_TIMEOUT_MS` | `10000` | Timeout for each optional Tautulli request. Tautulli failures do not affect Plex tools or `/health`. |
@@ -218,7 +218,7 @@ linux/amd64 + linux/arm64), published by CI on every push to `main`.
 # Required env vars (or use a .env file):
 export PLEX_URL=http://192.168.1.50:32400
 export PLEX_TOKEN=your-token
-export MCP_ALLOWED_HOSTS=nas.local:3001  # required — see below
+export MCP_ALLOWED_HOSTS=nas.local  # required — see below
 export HOST_PORT=3001  # optional, defaults to 3001
 
 docker compose up
@@ -247,9 +247,12 @@ docker compose up
 
 ### `MCP_ALLOWED_HOSTS` is required in HTTP mode
 
-Comma-separated list of `Host` header values the server accepts on
-`/mcp` — e.g. `nas.local:3001` (must match whatever host:port a client
-actually dials, including the mapped `HOST_PORT`). The server refuses
+Comma-separated list of `Host` header hostnames the server accepts on
+`/mcp` — e.g. `nas.local` (bare hostname; matching is port-independent,
+so `HOST_PORT` doesn't need to appear here — fleet-canonical form is
+`localhost,127.0.0.1,[::1],nas.local,host.docker.internal`). A
+`host:port` entry still matches too — the port is simply ignored — for
+compatibility with a not-yet-updated deployed value. The server refuses
 to start in HTTP mode without it, and `docker compose config` fails
 the same way if it's unset — both fail before the container ever
 comes up, deliberately, rather than starting in a silently-unprotected
@@ -354,7 +357,7 @@ just refuses to start the container.
 npm install
 cp .env.example .env  # then edit
 PLEX_URL=... PLEX_TOKEN=... npm run dev               # stdio
-MCP_PORT=3000 MCP_ALLOWED_HOSTS=localhost:3000 PLEX_URL=... PLEX_TOKEN=... npm run dev # HTTP
+MCP_PORT=3000 MCP_ALLOWED_HOSTS=localhost PLEX_URL=... PLEX_TOKEN=... npm run dev # HTTP
 ```
 
 ## Logging

@@ -30,6 +30,21 @@ the work rather than after the fact.
 
 ### Changed
 
+- **`MCP_ALLOWED_HOSTS` matching is now hostname-only and port-independent,
+  aligned with the rest of the fleet.** The Host allowlist previously
+  required an exact `host:port` match (e.g. `nas.local:3001`), a holdover
+  from before the fleet's shared allowlist convention existed (STATUS.md
+  MCP-S01). A DNS-rebinding attacker's Host header port is pinned by the
+  real TCP connection regardless — the allowlist defends hostnames, not
+  ports — so the stricter match added no real protection while forcing a
+  fleet-inconsistent value. Host extraction now uses URL-authority parsing
+  (`hostnameFromAuthority` in `src/mcp-route.ts`, mirroring plex-companion's
+  2026-08-30 IPv6 fix) so bracketed IPv6 like `[::1]` also works. A
+  `host:port` allowlist entry still matches — the port is ignored — so an
+  already-deployed value keeps working without an env change.
+- **`MCP_SESSION_IDLE_TIMEOUT_MS` renamed to `MCP_SESSION_IDLE_MS`**
+  (default 30 min, was 1 hr) to match every other fleet MCP server's name
+  and default for the same idle-session-eviction concept.
 - **Package renamed to `@carldog/plex-mcp`.** The unscoped name `plex-mcp`
   is owned by an unrelated package (`vyb1ng/plex-mcp`), so it was never
   available; a scope is reserved to the account, so no name inside it can be

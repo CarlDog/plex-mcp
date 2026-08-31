@@ -18,22 +18,24 @@ services:
       TAUTULLI_API_KEY: "${TAUTULLI_API_KEY:-}"
       TAUTULLI_TIMEOUT_MS: "${TAUTULLI_TIMEOUT_MS:-10000}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
-      # Required in HTTP mode (MCP-F03): comma-separated Host header values
-      # this server accepts on /mcp. Must include whatever host:port a
-      # client actually dials — e.g. your-nas:3001 for the mapped HOST_PORT
-      # above, plus host.docker.internal:${HOST_PORT} if a sibling MCP
-      # container on this host needs to call in too (reaching back via the
-      # published port, not the internal Docker network). Set explicitly
-      # in the stack's environment variables, same as PLEX_URL/PLEX_TOKEN/
-      # HOST_IMAGE_DIR — this is a security allowlist, not a harmless
-      # convenience default, so it stays fully operator-controlled rather
-      # than partially templated here. Defends against DNS rebinding:
-      # without this, a page loaded in a LAN browser could rebind its own
-      # hostname to this container's IP and drive tools (including writes)
-      # as a confused deputy — "LAN only, no auth" is not a real boundary
-      # against that attack shape. The server refuses to start in HTTP
-      # mode without it.
-      MCP_ALLOWED_HOSTS: "${MCP_ALLOWED_HOSTS:?MCP_ALLOWED_HOSTS must be set, e.g. your-nas:3001 — see docker-deployments.md rule #8}"
+      # Required in HTTP mode (MCP-F03): comma-separated Host header
+      # hostnames this server accepts on /mcp. Bare hostnames only, no
+      # ports — matching is hostname-only and port-independent (aligned
+      # 2026-08-30 with the rest of the fleet). Fleet-canonical value:
+      # localhost,127.0.0.1,[::1],your-nas,host.docker.internal — add
+      # host.docker.internal if a sibling MCP container on this host needs
+      # to call in too. A host:port entry still works (the port is simply
+      # ignored) so an old-style value keeps matching unchanged. Set
+      # explicitly in the stack's environment variables, same as
+      # PLEX_URL/PLEX_TOKEN/HOST_IMAGE_DIR — this is a security allowlist,
+      # not a harmless convenience default, so it stays fully
+      # operator-controlled rather than partially templated here. Defends
+      # against DNS rebinding: without this, a page loaded in a LAN browser
+      # could rebind its own hostname to this container's IP and drive
+      # tools (including writes) as a confused deputy — "LAN only, no
+      # auth" is not a real boundary against that attack shape. The server
+      # refuses to start in HTTP mode without it.
+      MCP_ALLOWED_HOSTS: "${MCP_ALLOWED_HOSTS:?MCP_ALLOWED_HOSTS must be set, e.g. localhost,127.0.0.1,[::1],your-nas,host.docker.internal — see docker-deployments.md rule #8}"
       # Optional: comma-separated Origin header values to accept. Leave
       # unset (default) unless a browser-based client legitimately needs to
       # call this server directly — non-browser clients (the mcp-remote
@@ -42,9 +44,11 @@ services:
       # attack actually sends.
       MCP_ALLOWED_ORIGINS: "${MCP_ALLOWED_ORIGINS:-}"
       # Optional: evict an MCP session after this many idle milliseconds
-      # (no activity, not total lifetime). Default 1 hour. Guards against
-      # sessions leaking forever when a client disappears uncleanly.
-      MCP_SESSION_IDLE_TIMEOUT_MS: "${MCP_SESSION_IDLE_TIMEOUT_MS:-3600000}"
+      # (no activity, not total lifetime). Default 30 min, matching every
+      # other fleet MCP server (renamed from MCP_SESSION_IDLE_TIMEOUT_MS,
+      # default was 1h, 2026-08-30). Guards against sessions leaking
+      # forever when a client disappears uncleanly.
+      MCP_SESSION_IDLE_MS: "${MCP_SESSION_IDLE_MS:-1800000}"
       # Optional: timeout in milliseconds for every outbound request to
       # Plex (MCP-F01). A hung or half-open Plex server would otherwise
       # block a tool call indefinitely. Default 30s.

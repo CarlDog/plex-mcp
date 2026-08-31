@@ -15,17 +15,22 @@
 // that. This does.
 //
 // Ported from the fleet-canonical src/shared/http-transport.test.ts, adapted
-// to plex-mcp's own contract: JSON-RPC error envelopes (not bare `{ error }`),
-// a Host allowlist matched against the full `host:port` and answering 421, and
-// an Origin allowlist answering 403. Those differences are the reason this
-// repo keeps its own route rather than adopting the shared module.
+// to plex-mcp's own contract: JSON-RPC error envelopes (not bare `{ error }`)
+// and a 421 status on a rejected Host (the shared module uses 403). Host
+// matching itself (hostname-only, port-independent, bracketed-IPv6-aware) now
+// uses the same URL-authority parser as the rest of the fleet — see
+// hostnameFromAuthority in ../src/mcp-route.ts.
 
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, describe, expect, test } from "vitest";
-import { mountMcpRoute, type McpRouteOptions } from "../src/mcp-route.js";
+import {
+  hostnameFromAuthority,
+  mountMcpRoute,
+  type McpRouteOptions,
+} from "../src/mcp-route.js";
 
 const ACCEPT = "application/json, text/event-stream";
 const UNKNOWN_SESSION = "00000000-0000-0000-0000-000000000000";
@@ -48,11 +53,11 @@ const live: Harness[] = [];
 /**
  * Boot a real listener with the route mounted on it.
  *
- * The listen happens BEFORE the mount because plex-mcp matches the full
- * `host:port` — the allowlist can't be built until the ephemeral port is
- * known. Express resolves routes per request, so registering after listen is
- * fine. Pass `allowedHosts` explicitly to make the request's real Host header
- * fail the check.
+ * Host matching is hostname-only now, so the allowlist no longer depends on
+ * the ephemeral port — `127.0.0.1` below matches regardless of which port the
+ * listener actually bound. Express resolves routes per request, so mounting
+ * after listen is still fine either way. Pass `allowedHosts` explicitly to
+ * make the request's real Host header fail the check.
  */
 async function start(opts: Partial<McpRouteOptions> = {}): Promise<Harness> {
   const app = express();
@@ -66,7 +71,7 @@ async function start(opts: Partial<McpRouteOptions> = {}): Promise<Harness> {
   const mcp = mountMcpRoute(app, "/mcp", {
     createServer: () =>
       new McpServer({ name: "mcp-route-test", version: "0.0.0" }),
-    allowedHosts: [`127.0.0.1:${port}`],
+    allowedHosts: ["127.0.0.1"],
     allowedOrigins: [],
     sessionIdleTimeoutMs: 60_000,
     ...opts,
@@ -187,12 +192,38 @@ describe("hardening is unchanged", () => {
     expect(await res.json()).toEqual({ error: "Invalid Host header" });
   });
 
-  test("the Host allowlist includes the port, so a bare hostname is rejected", async () => {
-    // Guards the exact-match contract: `127.0.0.1` must NOT satisfy an
-    // allowlist entry when the client dialed `127.0.0.1:<port>`. A relaxed
-    // hostname-only match (what the shared fleet module does) would let any
-    // port through and silently widen this server's allowlist.
-    const { url } = await start({ allowedHosts: ["127.0.0.1"] });
+  test("a bare-hostname allowlist entry matches the request regardless of port", async () => {
+    // Host matching is hostname-only: the client always dials
+    // `127.0.0.1:<ephemeral port>`, and the default `start()` allowlist
+    // (`["127.0.0.1"]`) has no port at all. This is the fleet-standard
+    // MCP_ALLOWED_HOSTS contract (no ports in the value).
+    const { url } = await start();
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: ACCEPT },
+      body: JSON.stringify(INIT_BODY),
+    });
+    expect(res.status).not.toBe(421);
+    await res.body?.cancel();
+  });
+
+  test("a host:port allowlist entry still matches — the port is ignored", async () => {
+    // Migration compatibility: a stack env not yet updated to the port-less
+    // canonical form must keep working unchanged. The entry's port (9999)
+    // deliberately does NOT match the real ephemeral listen port, to prove
+    // it plays no role in the comparison at all.
+    const { url } = await start({ allowedHosts: ["127.0.0.1:9999"] });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: ACCEPT },
+      body: JSON.stringify(INIT_BODY),
+    });
+    expect(res.status).not.toBe(421);
+    await res.body?.cancel();
+  });
+
+  test("a hostname outside the allowlist is rejected regardless of port", async () => {
+    const { url } = await start({ allowedHosts: ["allowed.example"] });
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: ACCEPT },
@@ -200,6 +231,12 @@ describe("hardening is unchanged", () => {
     });
     expect(res.status).toBe(421);
     await res.body?.cancel();
+  });
+
+  test("hostnameFromAuthority parses a bracketed IPv6 host independently of its port", () => {
+    expect(hostnameFromAuthority("[::1]:3009")).toBe("[::1]");
+    expect(hostnameFromAuthority("your-nas:3001")).toBe("your-nas");
+    expect(hostnameFromAuthority("your-nas")).toBe("your-nas");
   });
 
   test("an Origin header outside the allowlist answers 403", async () => {
