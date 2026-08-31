@@ -1,5 +1,5 @@
-// The Streamable HTTP `/mcp` route: Host/Origin allowlist, per-session
-// transport map, idle-session sweep, and session dispatch.
+// The Streamable HTTP `/mcp` route: Host/Origin allowlist, optional bearer
+// auth, per-session transport map, idle-session sweep, and session dispatch.
 //
 // Extracted from index.ts purely to create a test seam. index.ts self-executes
 // on import — it either starts a listener or connects stdio at module scope —
@@ -10,25 +10,28 @@
 //
 // Still NOT sharing the fleet-canonical src/shared/http-transport.ts wholesale
 // (this route keeps JSON-RPC error envelopes, not the shared module's bare
-// `{ error }` body — a real response-shape difference, and this repo predates
-// the shared module per STATUS.md MCP-S01). Host matching, however, is now
-// aligned with the rest of the fleet: hostname-only, port-independent, via the
-// same URL-authority parser plex-companion's fix (2026-08-30) introduced for
-// bracketed IPv6. The exact-match-on-host:port contract this used to pin was a
-// holdover from before that convention existed, not a stronger security
-// posture — a DNS-rebinding attacker's Host header port is pinned by the real
-// TCP connection (the browser must dial the actual published port to reach
-// this socket at all), and an attacker who can already reach the port can
-// trivially send the right one anyway. The allowlist defends hostnames, not
-// ports. Allowlist entries may still carry a `host:port` form (the port is
-// simply ignored) so an old-style deployed value keeps working unchanged.
+// `{ error }` body — a real response-shape difference, and its Host-rejection
+// status is 421 where the shared module uses 403). Host *matching* itself,
+// however, now delegates to src/shared/mcp-environment.ts
+// (`requestAuthorityAllowed`) — the same fleet-canonical module ported into
+// kindroid-mcp/servarr-mcp/filesystem-mcp/portainer-mcp/mnemosyne-mcp/
+// plex-companion/downloader-mcp this pass — called with no `origin` key, so
+// it validates Host only; the separate `allowedOrigins` check below stays
+// this repo's own deliberate design (a distinct explicit allowlist rather
+// than reusing allowedHosts for Origin matching, since a browser-facing
+// frontend can legitimately live on a different hostname than the one MCP
+// clients use to reach this server). The exact-match-on-host:port contract
+// this route used to pin, and the later `host:port`-tolerant back-compat
+// shim, are both retired: MCP_ALLOWED_HOSTS is validated strictly by
+// src/config.ts at startup now, the same as every other fleet server.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Express, NextFunction, Request, Response } from "express";
 import { log } from "./log.js";
+import { requestAuthorityAllowed } from "./shared/mcp-environment.js";
 
 export interface McpRouteOptions {
   /**
@@ -42,8 +45,7 @@ export interface McpRouteOptions {
   /**
    * `Host` header hostnames accepted on this route, matched case-insensitively
    * and independent of port (e.g. `your-nas`; bracketed IPv6 like `[::1]` is
-   * supported). A `host:port` entry also works — the port is ignored — so an
-   * old-style deployed value keeps matching unchanged. Empty rejects
+   * supported), via the shared `requestAuthorityAllowed()`. Empty rejects
    * everything; config.ts refuses to start HTTP mode without it, so that
    * state is unreachable in production.
    */
@@ -62,13 +64,23 @@ export interface McpRouteOptions {
    */
   sweepIntervalMs?: number;
   /**
-   * Optional bearer-token auth (ChatGPT Apps SDK alignment, Phase 2 — see
-   * src/auth.ts). Runs AFTER checkHostAndOrigin below: the Host/Origin
-   * allowlist is the cheaper, no-crypto defense and should reject a
-   * spoofed Host before this does any JWKS work. Omitted entirely when
-   * auth isn't configured (MCP_OAUTH_ISSUER unset) — every existing
-   * caller of mountMcpRoute that doesn't pass this gets identical
-   * behavior to before this option existed.
+   * Shared-secret bearer auth (`MCP_AUTH_TOKEN`), the same fleet-standard
+   * mechanism every sibling MCP server supports. Runs AFTER checkHostAndOrigin
+   * (cheaper, no-crypto check first) and BEFORE the OAuth `authMiddleware`
+   * below — an independent, simpler layer for MCP clients (Claude Desktop/
+   * Code) that don't speak OAuth, not a replacement for it. Unset leaves the
+   * route open to this check (fail-soft, warned at startup by index.ts) —
+   * matches every other fleet server's default.
+   */
+  authToken?: string | undefined;
+  /**
+   * Optional bearer-JWT auth (ChatGPT Apps SDK alignment, Phase 2 — see
+   * src/auth.ts). Runs AFTER checkHostAndOrigin and the shared-secret
+   * `authToken` check above: cheapest, no-crypto checks first, then the
+   * simple constant-time comparison, then the more expensive JWKS-backed
+   * verification. Omitted entirely when auth isn't configured
+   * (MCP_OAUTH_ISSUER unset) — every existing caller of mountMcpRoute that
+   * doesn't pass this gets identical behavior to before this option existed.
    */
   authMiddleware?: (
     req: Request,
@@ -83,35 +95,6 @@ export interface McpRouteOptions {
  * Returns a dispose() that clears the sweep timer and closes live sessions, so
  * tests and graceful shutdown don't leak handles.
  */
-/**
- * Extract the hostname portion of a `Host`-header-style authority string,
- * independent of any port suffix. Uses URL parsing (not a colon-split) so
- * bracketed IPv6 (`[::1]:3009`) resolves to `[::1]`, not the mangled `[` a
- * naive split produces — see plex-companion's 2026-08-30 IPv6 fix, which this
- * mirrors. Returns undefined for anything that isn't a bare authority (a
- * userinfo, path, query, or fragment component means the header was not a
- * plain host[:port] value).
- */
-export function hostnameFromAuthority(
-  value: string | undefined,
-): string | undefined {
-  try {
-    const authority = new URL(`http://${value ?? ""}`);
-    if (
-      authority.username ||
-      authority.password ||
-      authority.pathname !== "/" ||
-      authority.search ||
-      authority.hash
-    ) {
-      return undefined;
-    }
-    return authority.hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
-}
-
 export function mountMcpRoute(
   app: Express,
   path: string,
@@ -120,21 +103,14 @@ export function mountMcpRoute(
   const transports: Record<string, StreamableHTTPServerTransport> = {};
   const sessionLastActivity: Record<string, number> = {};
 
-  // Normalized once at mount time, not per-request: strips a port suffix off
-  // each configured entry too, so a deployed value that still says
-  // `your-nas:3001` (the pre-alignment format) keeps matching without an env
-  // change.
-  const normalizedAllowedHosts = opts.allowedHosts.map(
-    (h) => hostnameFromAuthority(h) ?? h.toLowerCase(),
-  );
-
   function checkHostAndOrigin(
     req: Request,
     res: Response,
     next: () => void,
   ): void {
-    const host = hostnameFromAuthority(req.headers.host);
-    if (!host || !normalizedAllowedHosts.includes(host)) {
+    if (
+      !requestAuthorityAllowed({ host: req.headers.host }, opts.allowedHosts)
+    ) {
       log.warn("transport", "rejected: disallowed Host header", {
         host: req.headers.host,
       });
@@ -150,9 +126,41 @@ export function mountMcpRoute(
     next();
   }
 
-  const middlewares = opts.authMiddleware
-    ? [checkHostAndOrigin, opts.authMiddleware]
-    : [checkHostAndOrigin];
+  /** Constant-time bearer comparison over SHA-256 digests. */
+  function tokenMatches(provided: string, expected: string): boolean {
+    const a = createHash("sha256").update(provided).digest();
+    const b = createHash("sha256").update(expected).digest();
+    // Hashing first makes both sides fixed-length, so timingSafeEqual cannot
+    // throw on a length mismatch — and length itself stops being an oracle.
+    return timingSafeEqual(a, b);
+  }
+
+  function checkBearerToken(
+    req: Request,
+    res: Response,
+    next: () => void,
+  ): void {
+    if (!opts.authToken) {
+      next();
+      return;
+    }
+    const header = req.headers.authorization;
+    const provided =
+      typeof header === "string" && header.startsWith("Bearer ")
+        ? header.slice("Bearer ".length)
+        : "";
+    if (!provided || !tokenMatches(provided, opts.authToken)) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    next();
+  }
+
+  const middlewares = [
+    checkHostAndOrigin,
+    checkBearerToken,
+    ...(opts.authMiddleware ? [opts.authMiddleware] : []),
+  ];
 
   app.all(path, ...middlewares, async (req: Request, res: Response) => {
     try {

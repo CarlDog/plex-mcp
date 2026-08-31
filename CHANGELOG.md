@@ -27,6 +27,16 @@ the work rather than after the fact.
   /actions/removeFromContinueWatching?ratingKey=...`) was found by
   capturing Plex Web's own network traffic, since the community OpenAPI
   spec documented the wrong query param (`key` instead of `ratingKey`).
+- **Optional shared-secret bearer auth (`MCP_AUTH_TOKEN`) for `/mcp`.**
+  This was the last fleet MCP server with zero auth capability beyond
+  the Host/Origin allowlist. `MCP_AUTH_TOKEN` adds the same
+  constant-time-compared bearer check every sibling server supports —
+  checked after the Host/Origin allowlist and before the existing OAuth
+  2.1 JWT flow (`MCP_OAUTH_*`), an independent, simpler layer for
+  non-OAuth MCP clients. Unset (the current live-deployment state) logs
+  a startup warning and leaves `/mcp` open to this particular check, same
+  fail-soft default as every sibling server. `/health` stays unauthenticated
+  (Docker's healthcheck can't supply a token).
 
 ### Changed
 
@@ -37,11 +47,18 @@ the work rather than after the fact.
   MCP-S01). A DNS-rebinding attacker's Host header port is pinned by the
   real TCP connection regardless — the allowlist defends hostnames, not
   ports — so the stricter match added no real protection while forcing a
-  fleet-inconsistent value. Host extraction now uses URL-authority parsing
-  (`hostnameFromAuthority` in `src/mcp-route.ts`, mirroring plex-companion's
-  2026-08-30 IPv6 fix) so bracketed IPv6 like `[::1]` also works. A
-  `host:port` allowlist entry still matches — the port is ignored — so an
-  already-deployed value keeps working without an env change.
+  fleet-inconsistent value. Host matching now delegates to the
+  fleet-canonical `src/shared/mcp-environment.ts` (`requestAuthorityAllowed`,
+  the same module ported into kindroid-mcp/servarr-mcp/filesystem-mcp/
+  portainer-mcp/mnemosyne-mcp/plex-companion/downloader-mcp this pass),
+  called host-only so bracketed IPv6 like `[::1]` works while this repo's
+  own separate `MCP_ALLOWED_ORIGINS` allowlist stays untouched. This also
+  retires the `host:port`-tolerant back-compat this repo's earlier fix
+  shipped the same day: `MCP_ALLOWED_HOSTS` is now validated strictly at
+  startup — a `host:port` entry, scheme, or wildcard throws immediately
+  with a clear message instead of being silently tolerated. The
+  transition window is closed (the live deployment's env is already
+  port-less canonical).
 - **`MCP_SESSION_IDLE_TIMEOUT_MS` renamed to `MCP_SESSION_IDLE_MS`**
   (default 30 min, was 1 hr) to match every other fleet MCP server's name
   and default for the same idle-session-eviction concept.

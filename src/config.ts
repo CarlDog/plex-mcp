@@ -17,6 +17,7 @@
 //   container's life) and not worth the churn.
 
 import { log } from "./log.js";
+import { parseAllowedHosts } from "./shared/mcp-environment.js";
 import { resolveTautulliConfig, type TautulliConfigState } from "./tautulli.js";
 
 function fail(message: string, meta?: Record<string, unknown>): never {
@@ -31,6 +32,7 @@ export interface Config {
   allowedHosts: string[];
   allowedOrigins: string[];
   sessionIdleTimeoutMs: number;
+  authToken: string | undefined;
   tautulli: TautulliConfigState;
 }
 
@@ -57,10 +59,20 @@ function loadConfig(): Config {
   // src/index.ts's own guard instead. Required (not opt-in) in HTTP
   // mode: an HTTP MCP server with no Host allowlist at all is the gap,
   // not a degraded-but-working default.
-  const allowedHosts = (process.env.MCP_ALLOWED_HOSTS ?? "")
-    .split(",")
-    .map((h) => h.trim())
-    .filter(Boolean);
+  //
+  // Deliberately NOT parseAllowedHosts(undefined)'s safe-default fallback
+  // when the raw value is absent — that's how every other fleet server
+  // treats "unset", but this repo's stance is stricter on purpose (see
+  // "Required (not opt-in)" above): unset must fail loudly, not silently
+  // degrade to a default list. When a value IS present, each entry is
+  // still validated by the same canonical, DNS-label-strict parser
+  // (parseAllowedHosts throws on a host:port authority, a scheme, or a
+  // wildcard) so a malformed entry is caught here at startup rather than
+  // per-request.
+  const allowedHostsRaw = process.env.MCP_ALLOWED_HOSTS;
+  const allowedHosts = allowedHostsRaw?.trim()
+    ? parseAllowedHosts(allowedHostsRaw)
+    : [];
   // Origins are a browser-only concept; a legitimate non-browser client
   // (the mcp-remote bridge, a direct fetch) never sends one. Default
   // empty means "reject every browser-originated request" — the correct
@@ -74,9 +86,14 @@ function loadConfig(): Config {
 
   if (port && allowedHosts.length === 0) {
     fail(
-      "MCP_ALLOWED_HOSTS is required in HTTP mode: comma-separated Host header hostnames this server accepts on /mcp (e.g. 'your-nas'; ports are ignored if included). Defends against DNS rebinding — see docker-deployments.md rule #8.",
+      "MCP_ALLOWED_HOSTS is required in HTTP mode: comma-separated bare Host header hostnames this server accepts on /mcp (e.g. 'your-nas'; a host:port entry, scheme, or wildcard is rejected). Defends against DNS rebinding — see docker-deployments.md rule #8.",
     );
   }
+
+  // Shared-secret bearer auth (MCP_AUTH_TOKEN), fleet-standard and optional
+  // (fail-soft — unset logs a startup warning in index.ts rather than
+  // exiting). Independent of the MCP_OAUTH_* JWT flow in src/auth.ts.
+  const authToken = process.env.MCP_AUTH_TOKEN || undefined;
 
   // Idle MCP sessions leak otherwise: transports only get cleaned up via
   // client-initiated onclose (a DELETE, or a graceful disconnect). A
@@ -97,6 +114,7 @@ function loadConfig(): Config {
     allowedHosts,
     allowedOrigins,
     sessionIdleTimeoutMs,
+    authToken,
     tautulli: resolveTautulliConfig(),
   };
 }

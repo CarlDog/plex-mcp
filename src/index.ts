@@ -49,12 +49,24 @@ const {
   allowedHosts: MCP_ALLOWED_HOSTS,
   allowedOrigins: MCP_ALLOWED_ORIGINS,
   sessionIdleTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+  authToken: MCP_AUTH_TOKEN,
 } = config;
 
 if (port) {
   // HTTP transport (long-lived server, e.g. for Portainer/Compose deployment).
   const app = express();
   app.use(express.json());
+
+  if (MCP_AUTH_TOKEN) {
+    log.info("auth", "MCP_AUTH_TOKEN set — /mcp requires a bearer token");
+  } else {
+    log.warn(
+      "auth",
+      "MCP_AUTH_TOKEN not set — /mcp accepts unauthenticated requests from " +
+        "anything that passes the Host/Origin allowlist. Set it unless this " +
+        "is a fully trusted network.",
+    );
+  }
 
   // OAuth 2.1 protected-resource auth (ChatGPT Apps SDK alignment, Phase
   // 2 — see docs/CHATGPT-APPS-SDK.md). Opt-in: MCP_OAUTH_ISSUER unset
@@ -81,6 +93,7 @@ if (port) {
     allowedHosts: MCP_ALLOWED_HOSTS,
     allowedOrigins: MCP_ALLOWED_ORIGINS,
     sessionIdleTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+    authToken: MCP_AUTH_TOKEN,
     authMiddleware: authConfig ? createAuthMiddleware(authConfig) : undefined,
   });
 

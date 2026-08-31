@@ -92,8 +92,8 @@ All have working defaults; set only to override.
 | `TAUTULLI_API_KEY` | unset | Optional Tautulli API key. Required only when `TAUTULLI_URL` is set; never returned or logged. |
 | `TAUTULLI_TIMEOUT_MS` | `10000` | Timeout for each optional Tautulli request. Tautulli failures do not affect Plex tools or `/health`. |
 
-`LOG_LEVEL`, `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`, and
-`HOST_IMAGE_DIR`/`HOST_LOG_DIR`/`HOST_PLEX_LOG_SOURCE_DIR` are covered in their own sections below
+`LOG_LEVEL`, `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`, `MCP_AUTH_TOKEN`,
+and `HOST_IMAGE_DIR`/`HOST_LOG_DIR`/`HOST_PLEX_LOG_SOURCE_DIR` are covered in their own sections below
 (Logging, HTTP transport hardening, Portainer deploy) since each needs
 more than a one-line note.
 
@@ -115,10 +115,11 @@ In HTTP mode the server exposes:
 - `POST/GET/DELETE /mcp` — MCP Streamable HTTP endpoint (per spec)
 - `GET /health` — liveness probe (used by docker healthcheck)
 
-> HTTP mode has **no caller authentication** — TLS (below) encrypts
-> traffic but doesn't identify the caller. Bind only to a private
-> network. Rely on host firewall or LAN isolation. Don't expose to the
-> public internet without adding bearer-token auth first.
+> HTTP mode enforces a required **Host/Origin allowlist**
+> (`MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`, above) and supports an
+> optional **shared-secret bearer token** (`MCP_AUTH_TOKEN`, below) — set
+> it before exposing this server beyond a fully trusted network. TLS
+> (below) encrypts traffic but doesn't identify the caller on its own.
 
 ### Enabling HTTPS
 
@@ -176,6 +177,30 @@ home services, the more idiomatic pattern is to terminate TLS at
 the proxy (with automatic Let's Encrypt) and keep `plex-mcp` on
 plain HTTP behind it. The two approaches are interchangeable — pick
 whichever matches your existing setup.
+
+### Bearer-token auth (`MCP_AUTH_TOKEN`, opt-in, usable today)
+
+A shared-secret bearer token, the same mechanism every sibling fleet MCP
+server (servarr-mcp, downloader-mcp, filesystem-mcp, portainer-mcp,
+mnemosyne-mcp, plex-companion, kindroid-mcp) supports — independent of,
+and simpler than, the OAuth 2.1 flow below. Unlike OAuth, this needs no
+identity provider: it's a single value you generate and share with each
+MCP client.
+
+| Var | Notes |
+| --- | --- |
+| `MCP_AUTH_TOKEN` | Shared secret. When set, every `/mcp` request must carry `Authorization: Bearer <token>` (constant-time comparison). Unset leaves `/mcp` open to this check — the server logs a startup warning either way, and `/health` is never gated (Docker's healthcheck can't supply one). |
+
+Checked after the Host/Origin allowlist (the cheaper, no-crypto check)
+and before the OAuth flow below, so a spoofed Host is rejected before
+either auth mechanism does any work. Recommended value: a random
+secret, e.g. `openssl rand -hex 32`.
+
+**Not yet set on the live deployment.** Turning it on is a coordinated
+change — every existing client (Claude Desktop, Claude Code via
+`mcp-remote`) needs its config updated with the token in the same
+window, or it loses access. Set it deliberately, not as a routine
+redeploy.
 
 ### OAuth 2.1 bearer-token auth (opt-in, not yet practically usable)
 
@@ -240,7 +265,8 @@ docker compose up
 3. Compose path: `docker-compose.yml`
 4. Environment variables: set `PLEX_URL`, `PLEX_TOKEN`,
    `MCP_ALLOWED_HOSTS`, `HOST_IMAGE_DIR`, and `HOST_LOG_DIR` — all
-   **required** (see below); optionally set `HOST_PORT` and the Tautulli pair
+   **required** (see below); recommended: `MCP_AUTH_TOKEN` (see above);
+   optionally set `HOST_PORT` and the Tautulli pair
    `TAUTULLI_URL`/`TAUTULLI_API_KEY` (`TAUTULLI_TIMEOUT_MS` defaults to
    `10000`). Leaving both Tautulli values unset disables that integration.
 5. Deploy. Healthcheck reaches green within ~10 seconds.
@@ -250,13 +276,14 @@ docker compose up
 Comma-separated list of `Host` header hostnames the server accepts on
 `/mcp` — e.g. `nas.local` (bare hostname; matching is port-independent,
 so `HOST_PORT` doesn't need to appear here — fleet-canonical form is
-`localhost,127.0.0.1,[::1],nas.local,host.docker.internal`). A
-`host:port` entry still matches too — the port is simply ignored — for
-compatibility with a not-yet-updated deployed value. The server refuses
-to start in HTTP mode without it, and `docker compose config` fails
-the same way if it's unset — both fail before the container ever
-comes up, deliberately, rather than starting in a silently-unprotected
-state.
+`localhost,127.0.0.1,[::1],nas.local,host.docker.internal`). Each entry
+is validated at startup by the same strict, DNS-label-aware parser the
+rest of the fleet uses — a `host:port` entry, scheme, or wildcard now
+throws immediately with a clear message instead of being silently
+tolerated. The server refuses to start in HTTP mode without it, and
+`docker compose config` fails the same way if it's unset — both fail
+before the container ever comes up, deliberately, rather than starting
+in a silently-unprotected state.
 
 This exists because binding `0.0.0.0` inside a container isn't a real
 access boundary the way loopback binding is on a bare host: a page

@@ -43,6 +43,13 @@ services:
       # empty default rejects only the request shape a DNS-rebinding
       # attack actually sends.
       MCP_ALLOWED_ORIGINS: "${MCP_ALLOWED_ORIGINS:-}"
+      # Optional: shared-secret bearer token for /mcp (fleet-standard,
+      # independent of the MCP_OAUTH_* JWT flow). Recommended, but left
+      # unset by default here deliberately — turning it on breaks every
+      # existing client until their configs carry the token too, so it's a
+      # coordinated change, not a routine redeploy default. See README's
+      # "Bearer-token auth" section.
+      MCP_AUTH_TOKEN: "${MCP_AUTH_TOKEN:-}"
       # Optional: evict an MCP session after this many idle milliseconds
       # (no activity, not total lifetime). Default 30 min, matching every
       # other fleet MCP server (renamed from MCP_SESSION_IDLE_TIMEOUT_MS,

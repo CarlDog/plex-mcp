@@ -26,10 +26,17 @@ what's next.
 
 - `src/index.ts` — MCP server entry. Decides transport based on `MCP_PORT`.
 - `src/mcp-route.ts` — the Streamable HTTP `/mcp` route: Host/Origin
-  allowlist, per-session transport map, idle sweep, session dispatch.
-  Split out of `index.ts` so it can be imported by a test — `index.ts`
-  self-executes on import, so nothing in it was reachable without booting
-  a server. Covered by `tests/mcp-route.test.ts`.
+  allowlist, optional bearer auth, per-session transport map, idle sweep,
+  session dispatch. Split out of `index.ts` so it can be imported by a
+  test — `index.ts` self-executes on import, so nothing in it was
+  reachable without booting a server. Covered by `tests/mcp-route.test.ts`.
+- `src/shared/mcp-environment.ts` — fleet-canonical Host/Origin matching
+  and env-parsing helpers, copied verbatim from the same module live in
+  kindroid-mcp/servarr-mcp/filesystem-mcp/portainer-mcp/mnemosyne-mcp/
+  plex-companion/downloader-mcp. `src/mcp-route.ts` uses only
+  `requestAuthorityAllowed` (host-only, via an omitted `origin` key);
+  `src/config.ts` uses `parseAllowedHosts` for strict per-entry
+  validation. Covered by `tests/mcp-environment.test.ts`.
 - `src/plex.ts` — Plex HTTP API client.
 - `src/tautulli.ts` — optional direct Tautulli HTTP client, fail-soft config,
   normalized privacy-allowlisted response types.
@@ -117,13 +124,20 @@ docker compose up --build
   JSON-stringified text content block.
 - Plex auth via env vars `PLEX_URL` and `PLEX_TOKEN`. The container is
   stateless; the token never lands on disk in the image.
-- HTTP mode currently has **no bearer-token auth** — bind only to
-  private networks. It does enforce a required `MCP_ALLOWED_HOSTS`
-  (and optional `MCP_ALLOWED_ORIGINS`) allowlist on `/mcp` as a
-  DNS-rebinding guard (`src/index.ts`) — that closes the "malicious
-  LAN webpage drives tools via the browser" gap, but is not a
-  substitute for real auth. Add a bearer token if ever exposed beyond
-  a trusted network.
+- HTTP mode enforces a required `MCP_ALLOWED_HOSTS` (and optional
+  `MCP_ALLOWED_ORIGINS`) allowlist on `/mcp` as a DNS-rebinding guard
+  (`src/config.ts`) — closes the "malicious LAN webpage drives tools via
+  the browser" gap. Host matching delegates to
+  `src/shared/mcp-environment.ts` (the fleet-canonical module, ported
+  into this repo 2026-08-31), called host-only; the separate
+  `allowedOrigins` allowlist stays this repo's own design. Optional
+  shared-secret bearer auth (`MCP_AUTH_TOKEN`, same mechanism as every
+  sibling fleet MCP) is supported but **not set on the live
+  deployment** — see README's "Bearer-token auth" section before
+  enabling it (every existing client needs its config updated with the
+  token in the same window). A separate OAuth 2.1 JWT flow
+  (`MCP_OAUTH_*`, `src/auth.ts`) exists for future ChatGPT Apps SDK
+  alignment and is independent of both.
 - **Git workflow: commit directly to `main` and push.** This is a
   personal repo — no PRs, no feature branches, no review gate. Releases
   are tagged directly on `main` (`git tag -a vX.Y.Z`). The pre-commit

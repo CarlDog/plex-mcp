@@ -18,19 +18,15 @@
 // to plex-mcp's own contract: JSON-RPC error envelopes (not bare `{ error }`)
 // and a 421 status on a rejected Host (the shared module uses 403). Host
 // matching itself (hostname-only, port-independent, bracketed-IPv6-aware) now
-// uses the same URL-authority parser as the rest of the fleet — see
-// hostnameFromAuthority in ../src/mcp-route.ts.
+// delegates to src/shared/mcp-environment.ts, same as the rest of the fleet —
+// see tests/mcp-environment.test.ts for the parser's own unit tests.
 
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, describe, expect, test } from "vitest";
-import {
-  hostnameFromAuthority,
-  mountMcpRoute,
-  type McpRouteOptions,
-} from "../src/mcp-route.js";
+import { mountMcpRoute, type McpRouteOptions } from "../src/mcp-route.js";
 
 const ACCEPT = "application/json, text/event-stream";
 const UNKNOWN_SESSION = "00000000-0000-0000-0000-000000000000";
@@ -182,7 +178,7 @@ describe("session lifecycle", () => {
 
 describe("hardening is unchanged", () => {
   test("a host outside the allowlist answers 421", async () => {
-    const { url } = await start({ allowedHosts: ["allowed.example:1234"] });
+    const { url } = await start({ allowedHosts: ["allowed.example"] });
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: ACCEPT },
@@ -207,21 +203,6 @@ describe("hardening is unchanged", () => {
     await res.body?.cancel();
   });
 
-  test("a host:port allowlist entry still matches — the port is ignored", async () => {
-    // Migration compatibility: a stack env not yet updated to the port-less
-    // canonical form must keep working unchanged. The entry's port (9999)
-    // deliberately does NOT match the real ephemeral listen port, to prove
-    // it plays no role in the comparison at all.
-    const { url } = await start({ allowedHosts: ["127.0.0.1:9999"] });
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: ACCEPT },
-      body: JSON.stringify(INIT_BODY),
-    });
-    expect(res.status).not.toBe(421);
-    await res.body?.cancel();
-  });
-
   test("a hostname outside the allowlist is rejected regardless of port", async () => {
     const { url } = await start({ allowedHosts: ["allowed.example"] });
     const res = await fetch(url, {
@@ -231,12 +212,6 @@ describe("hardening is unchanged", () => {
     });
     expect(res.status).toBe(421);
     await res.body?.cancel();
-  });
-
-  test("hostnameFromAuthority parses a bracketed IPv6 host independently of its port", () => {
-    expect(hostnameFromAuthority("[::1]:3009")).toBe("[::1]");
-    expect(hostnameFromAuthority("your-nas:3001")).toBe("your-nas");
-    expect(hostnameFromAuthority("your-nas")).toBe("your-nas");
   });
 
   test("an Origin header outside the allowlist answers 403", async () => {
@@ -274,8 +249,74 @@ describe("hardening is unchanged", () => {
 
   test("host and origin are checked before session handling", async () => {
     // An unknown session must not leak its 404 to a disallowed host.
-    const { url } = await start({ allowedHosts: ["allowed.example:1234"] });
+    const { url } = await start({ allowedHosts: ["allowed.example"] });
     const res = await callWithSession(url, UNKNOWN_SESSION);
+    expect(res.status).toBe(421);
+    await res.body?.cancel();
+  });
+
+  test("missing or wrong bearer token answers 401", async () => {
+    const { url } = await start({ authToken: "correct-horse" });
+
+    const none = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: ACCEPT },
+      body: JSON.stringify(INIT_BODY),
+    });
+    expect(none.status).toBe(401);
+    expect(await none.json()).toEqual({ error: "Unauthorized" });
+
+    const wrong = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: ACCEPT,
+        authorization: "Bearer battery-staple",
+      },
+      body: JSON.stringify(INIT_BODY),
+    });
+    await wrong.body?.cancel();
+    expect(wrong.status).toBe(401);
+  });
+
+  test("the correct bearer token is accepted", async () => {
+    const { url } = await start({ authToken: "correct-horse" });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: ACCEPT,
+        authorization: "Bearer correct-horse",
+      },
+      body: JSON.stringify(INIT_BODY),
+    });
+    expect(res.status).toBe(200);
+    await res.body?.cancel();
+  });
+
+  test("bearer auth is checked before session handling", async () => {
+    // An unknown session must not leak its 404 to an unauthenticated caller.
+    const { url } = await start({ authToken: "correct-horse" });
+    const res = await callWithSession(url, UNKNOWN_SESSION);
+    expect(res.status).toBe(401);
+    await res.body?.cancel();
+  });
+
+  test("host check happens before bearer auth", async () => {
+    // The cheap, no-crypto rejection should win over a 401.
+    const { url } = await start({
+      allowedHosts: ["allowed.example"],
+      authToken: "correct-horse",
+    });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: ACCEPT,
+        authorization: "Bearer battery-staple",
+      },
+      body: JSON.stringify(INIT_BODY),
+    });
     expect(res.status).toBe(421);
     await res.body?.cancel();
   });
