@@ -33,7 +33,7 @@ what's next.
 - `src/shared/mcp-environment.ts` — fleet-canonical Host/Origin matching
   and env-parsing helpers, copied verbatim from the same module live in
   kindroid-mcp/servarr-mcp/filesystem-mcp/portainer-mcp/mnemosyne-mcp/
-  plex-companion/downloader-mcp. `src/mcp-route.ts` uses only
+  watch-companion/downloader-mcp. `src/mcp-route.ts` uses only
   `requestAuthorityAllowed` (host-only, via an omitted `origin` key);
   `src/config.ts` uses `parseAllowedHosts` for strict per-entry
   validation. Covered by `tests/mcp-environment.test.ts`.

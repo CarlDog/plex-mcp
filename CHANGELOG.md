@@ -50,7 +50,7 @@ the work rather than after the fact.
   fleet-inconsistent value. Host matching now delegates to the
   fleet-canonical `src/shared/mcp-environment.ts` (`requestAuthorityAllowed`,
   the same module ported into kindroid-mcp/servarr-mcp/filesystem-mcp/
-  portainer-mcp/mnemosyne-mcp/plex-companion/downloader-mcp this pass),
+  portainer-mcp/mnemosyne-mcp/watch-companion/downloader-mcp this pass),
   called host-only so bracketed IPv6 like `[::1]` works while this repo's
   own separate `MCP_ALLOWED_ORIGINS` allowlist stays untouched. This also
   retires the `host:port`-tolerant back-compat this repo's earlier fix

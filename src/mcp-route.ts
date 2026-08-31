@@ -15,7 +15,7 @@
 // however, now delegates to src/shared/mcp-environment.ts
 // (`requestAuthorityAllowed`) — the same fleet-canonical module ported into
 // kindroid-mcp/servarr-mcp/filesystem-mcp/portainer-mcp/mnemosyne-mcp/
-// plex-companion/downloader-mcp this pass — called with no `origin` key, so
+// watch-companion/downloader-mcp this pass — called with no `origin` key, so
 // it validates Host only; the separate `allowedOrigins` check below stays
 // this repo's own deliberate design (a distinct explicit allowlist rather
 // than reusing allowedHosts for Origin matching, since a browser-facing

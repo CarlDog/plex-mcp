@@ -493,7 +493,7 @@ below), and poster management (`plex_list_posters`, `plex_set_poster`,
 
 ### Subtitle discovery — done; content fetch — declined (2026-08-03)
 
-Motivated by plex-companion wanting richer, more accurate context for its
+Motivated by watch-companion wanting richer, more accurate context for its
 watch-along reactions than a Plex synopsis + web search can give — subtitle
 text is exactly what was watched, timestamped, and inherently spoiler-safe
 up to the current position (unlike a web search, which can't help wandering

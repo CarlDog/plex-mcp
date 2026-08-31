@@ -182,7 +182,7 @@ whichever matches your existing setup.
 
 A shared-secret bearer token, the same mechanism every sibling fleet MCP
 server (servarr-mcp, downloader-mcp, filesystem-mcp, portainer-mcp,
-mnemosyne-mcp, plex-companion, kindroid-mcp) supports — independent of,
+mnemosyne-mcp, watch-companion, kindroid-mcp) supports — independent of,
 and simpler than, the OAuth 2.1 flow below. Unlike OAuth, this needs no
 identity provider: it's a single value you generate and share with each
 MCP client.
