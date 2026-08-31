@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, parse } from "node:path";
 import { describeTransportError } from "./errors.js";
 import { log } from "./log.js";
 import { annotateSubtitleStream } from "./subtitle.js";
@@ -83,6 +83,68 @@ export function resolveLogMaxBytes(raw: string | undefined): number {
 
 export function resolveLogFetchTimeoutMs(raw: string | undefined): number {
   return resolveIntEnv(raw, DEFAULT_LOG_FETCH_TIMEOUT_MS);
+}
+
+export const PLEX_PRIMARY_LOG_FILENAME = "Plex Media Server.log";
+
+export type PlexLogFallbackReason = `plex_http_${number}` | "transport_error";
+
+export function classifyPlexLogFallback(
+  err: unknown,
+): PlexLogFallbackReason | null {
+  const message = describeTransportError(err);
+  const status = message.match(/^Plex (\d{3})\b/u)?.[1];
+  if (status) {
+    const code = Number.parseInt(status, 10);
+    return code >= 500 && code <= 599 ? `plex_http_${code}` : null;
+  }
+  return /(?:fetch failed|abort|timeout|timed out|ECONN|ENOTFOUND|EAI_AGAIN|UND_ERR)/iu.test(
+    message,
+  )
+    ? "transport_error"
+    : null;
+}
+
+export function resolveFallbackLogFilename(
+  requested: string | undefined,
+  now = Date.now(),
+): string {
+  if (!requested) return `plex-server-log-${now}.log`;
+  assertSafeBasename(requested, "downloadLogs");
+  const parsed = parse(requested);
+  return parsed.ext.toLowerCase() === ".log"
+    ? requested
+    : `${parsed.name}.fallback.log`;
+}
+
+export function readPrimaryPlexLog(
+  sourceDir: string,
+  maxBytes: number,
+): Buffer {
+  const sourcePath = join(sourceDir, PLEX_PRIMARY_LOG_FILENAME);
+  try {
+    const stat = lstatSync(sourcePath);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error("source is not a regular non-symlink file");
+    }
+    if (stat.size > maxBytes) {
+      throw new Error(
+        `source is ${stat.size} bytes, exceeds MCP_LOG_MAX_BYTES=${maxBytes}`,
+      );
+    }
+    const buffer = readFileSync(sourcePath);
+    if (buffer.byteLength > maxBytes) {
+      throw new Error(
+        `source grew to ${buffer.byteLength} bytes while reading, exceeds MCP_LOG_MAX_BYTES=${maxBytes}`,
+      );
+    }
+    return buffer;
+  } catch (err) {
+    throw new Error(
+      `Plex filesystem log fallback could not read ${sourcePath}: ${describeTransportError(err)}. Verify HOST_PLEX_LOG_SOURCE_DIR is mounted read-only and MCP_PLEX_LOG_SOURCE_DIR points to that mount.`,
+      { cause: err },
+    );
+  }
 }
 
 /**
@@ -979,33 +1041,60 @@ export class PlexClient {
    * for no clear benefit (the caller can unzip the saved file if they
    * want its contents; filesystem-mcp already has that capability).
    */
-  async downloadLogs(
-    args: { filename?: string } = {},
-  ): Promise<{ path: string; bytes_written: number; mime_type: string }> {
+  async downloadLogs(args: { filename?: string } = {}): Promise<{
+    path: string;
+    bytes_written: number;
+    mime_type: string;
+    source: "plex_api" | "filesystem_fallback";
+    fallback_reason: PlexLogFallbackReason | null;
+  }> {
     const filename = args.filename ?? `plex-logs-${Date.now()}.zip`;
     assertSafeBasename(filename, "downloadLogs");
     const baseDir = process.env.MCP_LOG_SAVE_DIR ?? "/data/logs";
     ensureSaveDir(baseDir, "downloadLogs", "MCP_LOG_SAVE_DIR");
 
     const url = new URL("/diagnostics/logs", this.config.url);
-    const { buffer, mimeType } = await this.fetchCappedBinary(
-      url,
-      { "X-Plex-Token": this.config.token },
-      {
-        cap: resolveLogMaxBytes(process.env.MCP_LOG_MAX_BYTES),
-        capEnvVarName: "MCP_LOG_MAX_BYTES",
-        subject: "Plex logs bundle",
-        defaultMimeType: "application/zip",
-        logLabel: "logs",
-        timeoutMsOverride: resolveLogFetchTimeoutMs(
-          process.env.MCP_LOG_FETCH_TIMEOUT_MS,
-        ),
-      },
-    );
+    const cap = resolveLogMaxBytes(process.env.MCP_LOG_MAX_BYTES);
+    let buffer: Buffer;
+    let mimeType: string;
+    let outputFilename = filename;
+    let source: "plex_api" | "filesystem_fallback" = "plex_api";
+    let fallbackReason: PlexLogFallbackReason | null = null;
+    try {
+      const apiResult = await this.fetchCappedBinary(
+        url,
+        { "X-Plex-Token": this.config.token },
+        {
+          cap,
+          capEnvVarName: "MCP_LOG_MAX_BYTES",
+          subject: "Plex logs bundle",
+          defaultMimeType: "application/zip",
+          logLabel: "logs",
+          timeoutMsOverride: resolveLogFetchTimeoutMs(
+            process.env.MCP_LOG_FETCH_TIMEOUT_MS,
+          ),
+        },
+      );
+      buffer = apiResult.buffer;
+      mimeType = apiResult.mimeType;
+    } catch (err) {
+      fallbackReason = classifyPlexLogFallback(err);
+      if (!fallbackReason) throw err;
+
+      const sourceDir = process.env.MCP_PLEX_LOG_SOURCE_DIR ?? "/plex-logs";
+      buffer = readPrimaryPlexLog(sourceDir, cap);
+      mimeType = "text/plain";
+      outputFilename = resolveFallbackLogFilename(args.filename);
+      source = "filesystem_fallback";
+      log.warn("plex", "log API unavailable; using filesystem fallback", {
+        reason: fallbackReason,
+        bytes: buffer.byteLength,
+      });
+    }
 
     const savePath = writeBytesToPath(
       baseDir,
-      filename,
+      outputFilename,
       buffer,
       "downloadLogs",
     );
@@ -1018,6 +1107,8 @@ export class PlexClient {
       path: savePath,
       bytes_written: buffer.byteLength,
       mime_type: mimeType,
+      source,
+      fallback_reason: fallbackReason,
     };
   }
 

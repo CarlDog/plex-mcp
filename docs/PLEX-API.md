@@ -576,6 +576,14 @@ rather than the operator manually pulling logs via the web UI (Settings
   the whole bundle and greps the relevant file(s) themselves (or via a
   follow-up filesystem-mcp read) rather than a server-side filter this
   endpoint doesn't support.
+- **Offline/wedged-server fallback (2026-08-30):** if the endpoint
+  returns 5xx or fails at the transport layer, `plex_download_logs`
+  copies the primary `Plex Media Server.log` from the read-only
+  `MCP_PLEX_LOG_SOURCE_DIR` mount instead. It does not hide 4xx/auth
+  failures. The manifest identifies `source: filesystem_fallback`, uses
+  `text/plain`, and reports only a classified fallback reason, never the
+  log content or raw upstream response inline. The same
+  `MCP_LOG_MAX_BYTES` cap applies to both paths.
 
 ### Poster management ✓ pkkid — shipped 2026-08-03
 

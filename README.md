@@ -49,7 +49,7 @@ your Plex libraries.
 | `plex_merge_items` | Merge other items INTO a target item (sources absorbed; target survives) |
 | `plex_get_image` | Fetch poster/art/banner/clearLogo bytes for an item as an MCP image content block (so vision-capable clients can actually see the picture); optional max_width/max_height routes through Plex's transcoder |
 | `plex_save_image` | Same input surface as `plex_get_image`, but WRITES the bytes to disk under `MCP_IMAGE_SAVE_DIR` (default `/data/images/`) and returns the path + size. Bind-mount a host directory onto that path to bridge to a downstream pipeline (ImageMagick, filesystem-mcp consumer, etc.) without a vision render. |
-| `plex_download_logs` | Fetch the Plex Media Server's own diagnostic log bundle (a ZIP) and write it to disk under `MCP_LOG_SAVE_DIR` (default `/data/logs/`) |
+| `plex_download_logs` | Fetch Plex's diagnostic ZIP under `MCP_LOG_SAVE_DIR`; on Plex 5xx/transport failure, copy the primary server log from the read-only filesystem fallback mount |
 | `plex_list_posters` | List every poster candidate for an item (agent-supplied, locally-scanned, previously uploaded), including which one is currently active |
 | `plex_set_poster` | Select an existing poster candidate as the active one, by the candidate's own `poster_rating_key` from `plex_list_posters` |
 | `plex_upload_poster` | Add a new poster from an external URL (Plex fetches it) or a local file under `MCP_IMAGE_SAVE_DIR`. Auto-selects it by default; `select=false` adds it without changing what's displayed |
@@ -86,13 +86,14 @@ All have working defaults; set only to override.
 | `MCP_IMAGE_MAX_BYTES` | `4194304` (4 MiB) | Size cap for `plex_get_image`/`plex_save_image` |
 | `MCP_LOG_MAX_BYTES` | `52428800` (50 MiB) | Size cap for `plex_download_logs` |
 | `MCP_LOG_FETCH_TIMEOUT_MS` | `120000` (2 min) | Timeout for `plex_download_logs` — separate from `MCP_FETCH_TIMEOUT_MS` since a log ZIP has a different size/latency profile |
+| `MCP_PLEX_LOG_SOURCE_DIR` | `/plex-logs` | In-container read-only directory containing `Plex Media Server.log` for 5xx/transport fallback |
 | `MCP_SESSION_IDLE_TIMEOUT_MS` | `3600000` (1 hr) | Evicts an HTTP-mode MCP session after this much inactivity |
 | `TAUTULLI_URL` | unset | Optional Tautulli web root, including any HTTP root. Unset with `TAUTULLI_API_KEY` disables the integration. |
 | `TAUTULLI_API_KEY` | unset | Optional Tautulli API key. Required only when `TAUTULLI_URL` is set; never returned or logged. |
 | `TAUTULLI_TIMEOUT_MS` | `10000` | Timeout for each optional Tautulli request. Tautulli failures do not affect Plex tools or `/health`. |
 
 `LOG_LEVEL`, `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS`, and
-`HOST_IMAGE_DIR`/`HOST_LOG_DIR` are covered in their own sections below
+`HOST_IMAGE_DIR`/`HOST_LOG_DIR`/`HOST_PLEX_LOG_SOURCE_DIR` are covered in their own sections below
 (Logging, HTTP transport hardening, Portainer deploy) since each needs
 more than a one-line note.
 
@@ -268,9 +269,9 @@ non-browser clients (the `mcp-remote` bridge, a direct `fetch`) never
 send an `Origin` header, so the empty default only ever rejects the
 request shape a DNS-rebinding attack actually sends.
 
-### `HOST_IMAGE_DIR` and `HOST_LOG_DIR` are required — no relative default
+### Host image, log-output, and Plex log-source directories are required
 
-Both volume host paths are `${VAR:?...}` in the compose file: **there
+All three volume host paths are `${VAR:?...}` in the compose file: **there
 is no fallback default**, so `docker compose up` / a Portainer
 redeploy fails fast with a clear error if either is unset, rather than
 starting in a broken state.
@@ -290,7 +291,7 @@ manual action; the only symptom was the container sitting in
 The compose file now makes the requirement structural instead of a
 documentation-only convention.
 
-Set both to **absolute host paths** in the stack's environment
+Set all three to **absolute host paths** in the stack's environment
 variables:
 
 - `HOST_IMAGE_DIR` — the `plex_save_image` output directory.
@@ -302,8 +303,11 @@ variables:
   separate from `HOST_IMAGE_DIR` since a diagnostic ZIP isn't a media
   artifact — e.g. `/volume1/docker/plex-mcp/logs` on a Synology NAS
   (matching this fleet's per-container appdata convention).
+- `HOST_PLEX_LOG_SOURCE_DIR` — Plex's existing server-log directory,
+  mounted read-only for API-outage fallback. On this Synology package it
+  is `/volume1/docker/plex/Library/Application Support/Plex Media Server/Logs`.
 
-Make sure both directories exist on the host **before** the first
+Make sure all three directories exist on the host **before** the first
 deploy: Docker does not auto-create a missing bind-mount source, it
 just refuses to start the container.
 

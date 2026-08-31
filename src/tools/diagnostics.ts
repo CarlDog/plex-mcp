@@ -15,14 +15,14 @@ export function registerDiagnosticsTools(
     {
       title: "Download Plex Server Logs",
       description:
-        "Fetch Plex Media Server's own diagnostic log bundle (GET /diagnostics/logs — the same endpoint the web UI's Settings → Help → 'Download Server Logs' button uses) and WRITE it to disk inside the container under MCP_LOG_SAVE_DIR (default /data/logs/). Returns the path, byte count, and MIME type as JSON — NOT the archive content inline (a log bundle can be tens of MB and would blow the response budget). The response is an unmodified ZIP archive covering PMS's own logs — third-party plugin logs are excluded by Plex itself, not by this tool. Use for troubleshooting real server issues (a failed scheduled recording, a scan that silently skipped files, a match that errored) that plex_refresh_metadata/plex_refresh_section alone can't explain. `filename` must be a basename (no '/', '\\\\', '..', or leading '.') — defense against directory traversal; defaults to a timestamped name if omitted.",
+        "Fetch Plex Media Server's diagnostic ZIP through GET /diagnostics/logs and WRITE it under MCP_LOG_SAVE_DIR. If Plex returns 5xx or the transport fails, fall back to a capped read-only copy of Plex Media Server.log from MCP_PLEX_LOG_SOURCE_DIR. Returns path, byte count, MIME type, source, and a non-sensitive fallback reason - never log content inline. Authentication and other client errors do not trigger fallback. `filename` must be a safe basename; a filesystem fallback derives a .fallback.log name when a non-.log filename was requested.",
       inputSchema: {
         filename: z
           .string()
           .min(1)
           .optional()
           .describe(
-            "Basename to write under MCP_LOG_SAVE_DIR. No path separators or traversal sequences. Defaults to 'plex-logs-<timestamp>.zip' if omitted.",
+            "Safe output basename under MCP_LOG_SAVE_DIR. API success uses it as given; filesystem fallback preserves .log names or derives '<name>.fallback.log'.",
           ),
       },
       annotations: SAFE_WRITE_ANNOTATIONS,

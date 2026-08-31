@@ -55,6 +55,9 @@ services:
       # MCP_FETCH_TIMEOUT_MS above (50 MiB, 2 min vs 4 MiB, 30s).
       MCP_LOG_MAX_BYTES: "${MCP_LOG_MAX_BYTES:-52428800}"
       MCP_LOG_FETCH_TIMEOUT_MS: "${MCP_LOG_FETCH_TIMEOUT_MS:-120000}"
+      # Read-only Plex host-package log source used only when the Plex
+      # diagnostics API returns 5xx or cannot be reached.
+      MCP_PLEX_LOG_SOURCE_DIR: "${MCP_PLEX_LOG_SOURCE_DIR:-/plex-logs}"
       # Optional HTTPS — pick ONE of the two modes below.
       #
       # (a) Self-managed cert (recommended for LAN-only deployment):
@@ -94,6 +97,9 @@ services:
       # HOST_IMAGE_DIR above. Override the in-container path with
       # MCP_LOG_SAVE_DIR if you want it elsewhere.
       - "${HOST_LOG_DIR:?HOST_LOG_DIR must be set to an absolute host path, e.g. /volume1/docker/plex-mcp/logs — a relative default breaks Portainer git-stack redeploys, see docker-deployments.md rule #10}:/data/logs"
+      # Direct diagnostic fallback source. Required and read-only so a
+      # wedged Plex HTTP API cannot prevent retrieval of its primary log.
+      - "${HOST_PLEX_LOG_SOURCE_DIR:?HOST_PLEX_LOG_SOURCE_DIR must be set to Plex's absolute Logs directory, e.g. /volume1/docker/plex/Library/Application Support/Plex Media Server/Logs}:/plex-logs:ro"
       # Optional HTTPS cert volume (commented). Self-managed persists
       # across restarts; BYO is read-only.
       # - ./certs:/data/certs
