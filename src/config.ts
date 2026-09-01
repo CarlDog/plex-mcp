@@ -17,7 +17,10 @@
 //   container's life) and not worth the churn.
 
 import { log } from "./log.js";
-import { parseAllowedHosts } from "./shared/mcp-environment.js";
+import {
+  parseAllowedHosts,
+  parsePositiveInteger,
+} from "./shared/mcp-environment.js";
 import { resolveTautulliConfig, type TautulliConfigState } from "./tautulli.js";
 
 function fail(message: string, meta?: Record<string, unknown>): never {
@@ -32,6 +35,7 @@ export interface Config {
   allowedHosts: string[];
   allowedOrigins: string[];
   sessionIdleTimeoutMs: number;
+  rateLimitMaxRequests: number;
   authToken: string | undefined;
   tautulli: TautulliConfigState;
 }
@@ -106,6 +110,12 @@ function loadConfig(): Config {
   // fleet MCP server's name and default for the same concept.
   const sessionIdleTimeoutMs =
     Number.parseInt(process.env.MCP_SESSION_IDLE_MS ?? "", 10) || 1_800_000;
+  const rateLimitMaxRequests = parsePositiveInteger(
+    "MCP_RATE_LIMIT_MAX_REQUESTS",
+    process.env.MCP_RATE_LIMIT_MAX_REQUESTS,
+    60,
+    600,
+  );
 
   return {
     plexUrl: plexUrl!,
@@ -114,6 +124,7 @@ function loadConfig(): Config {
     allowedHosts,
     allowedOrigins,
     sessionIdleTimeoutMs,
+    rateLimitMaxRequests,
     authToken,
     tautulli: resolveTautulliConfig(),
   };

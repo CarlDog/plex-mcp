@@ -21,10 +21,10 @@
 // delegates to src/shared/mcp-environment.ts, same as the rest of the fleet —
 // see tests/mcp-environment.test.ts for the parser's own unit tests.
 
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import express from "express";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, test } from "vitest";
 import { mountMcpRoute, type McpRouteOptions } from "../src/mcp-route.js";
 
@@ -70,6 +70,7 @@ async function start(opts: Partial<McpRouteOptions> = {}): Promise<Harness> {
     allowedHosts: ["127.0.0.1"],
     allowedOrigins: [],
     sessionIdleTimeoutMs: 60_000,
+    rateLimitMaxRequests: 60,
     ...opts,
   });
 
@@ -177,6 +178,22 @@ describe("session lifecycle", () => {
 });
 
 describe("hardening is unchanged", () => {
+  test("requests above the per-client limit answer 429 before auth or sessions", async () => {
+    const { url } = await start({ rateLimitMaxRequests: 1 });
+    const first = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: ACCEPT },
+      body: JSON.stringify(INIT_BODY),
+    });
+    await first.body?.cancel();
+    expect(first.status).toBe(200);
+
+    const second = await callWithSession(url, UNKNOWN_SESSION);
+    expect(second.status).toBe(429);
+    expect(second.headers.get("retry-after")).toBeTruthy();
+    expect(await second.json()).toEqual({ error: "Too many requests" });
+  });
+
   test("a host outside the allowlist answers 421", async () => {
     const { url } = await start({ allowedHosts: ["allowed.example"] });
     const res = await fetch(url, {

@@ -56,6 +56,11 @@ services:
       # default was 1h, 2026-08-30). Guards against sessions leaking
       # forever when a client disappears uncleanly.
       MCP_SESSION_IDLE_MS: "${MCP_SESSION_IDLE_MS:-1800000}"
+      # Maximum /mcp requests accepted from one client IP per rolling
+      # 60-second window. Protects the unauthenticated-by-default HTTP route
+      # from request floods before it allocates an MCP session. Default 60;
+      # lower only when a client needs a stricter budget.
+      MCP_RATE_LIMIT_MAX_REQUESTS: "${MCP_RATE_LIMIT_MAX_REQUESTS:-60}"
       # Optional: timeout in milliseconds for every outbound request to
       # Plex (MCP-F01). A hung or half-open Plex server would otherwise
       # block a tool call indefinitely. Default 30s.

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createServer as createHttpsServer } from "node:https";
 import express, { type Request, type Response } from "express";
+import { createServer as createHttpsServer } from "node:https";
 import {
   createAuthMiddleware,
   loadAuthConfig,
@@ -12,9 +12,9 @@ import { config } from "./config.js";
 import { log } from "./log.js";
 import { mountMcpRoute } from "./mcp-route.js";
 import { PlexClient } from "./plex.js";
+import { TautulliClient } from "./tautulli.js";
 import { resolveTlsCredentials } from "./tls.js";
 import { registerTools } from "./tools/index.js";
-import { TautulliClient } from "./tautulli.js";
 import { SERVER_VERSION } from "./version.js";
 
 const plex = new PlexClient({ url: config.plexUrl, token: config.plexToken });
@@ -49,6 +49,7 @@ const {
   allowedHosts: MCP_ALLOWED_HOSTS,
   allowedOrigins: MCP_ALLOWED_ORIGINS,
   sessionIdleTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+  rateLimitMaxRequests: MCP_RATE_LIMIT_MAX_REQUESTS,
   authToken: MCP_AUTH_TOKEN,
 } = config;
 
@@ -93,6 +94,7 @@ if (port) {
     allowedHosts: MCP_ALLOWED_HOSTS,
     allowedOrigins: MCP_ALLOWED_ORIGINS,
     sessionIdleTimeoutMs: SESSION_IDLE_TIMEOUT_MS,
+    rateLimitMaxRequests: MCP_RATE_LIMIT_MAX_REQUESTS,
     authToken: MCP_AUTH_TOKEN,
     authMiddleware: authConfig ? createAuthMiddleware(authConfig) : undefined,
   });

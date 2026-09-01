@@ -1,6 +1,13 @@
 # Status
 
-**Last updated:** 2026-09-01 — hardened OAuth OIDC discovery against
+**Last updated:** 2026-09-01 — rate-limited the HTTP `/mcp` route before bearer
+or OAuth checks and before session allocation. Each client IP receives 60
+requests per 60-second window by default; excess requests receive `429` with a
+`Retry-After` header. Expired client windows share the existing unref'd session
+sweep, so the protection cannot grow state indefinitely. Operator override:
+`MCP_RATE_LIMIT_MAX_REQUESTS` (validated 1–600). Focused route tests, typecheck,
+and formatting pass. No stdio behavior changed.
+Previous entry, 2026-09-01 — hardened OAuth OIDC discovery against
 configuration-driven SSRF. `MCP_OAUTH_ISSUER` now accepts only clean HTTPS
 issuer URLs, and its discovery document may only name a same-origin JWKS URL;
 the existing local OIDC harness plus five new rejection cases verifies both

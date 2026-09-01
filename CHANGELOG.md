@@ -40,6 +40,14 @@ the work rather than after the fact.
 
 ### Changed
 
+- **Rate-limited the HTTP MCP route before authentication and session
+  allocation.** Each client IP receives 60 requests per 60-second window by
+  default; excess requests return `429` with `Retry-After`. Expired entries are
+  pruned by the existing unref'd session sweep, and
+  `MCP_RATE_LIMIT_MAX_REQUESTS` provides a validated 1–600 operator override.
+  This closes the unauthenticated-route request-flood finding without changing
+  stdio transport behavior.
+
 - **Hardened opt-in OAuth OIDC discovery against configuration-driven SSRF.**
   `MCP_OAUTH_ISSUER` must now be a clean HTTPS issuer URL with no credentials,
   query, or fragment, and OIDC discovery may only use a same-origin `jwks_uri`.

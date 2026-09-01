@@ -25,11 +25,11 @@
 // shim, are both retired: MCP_ALLOWED_HOSTS is validated strictly by
 // src/config.ts at startup now, the same as every other fleet server.
 
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { Express, NextFunction, Request, Response } from "express";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { log } from "./log.js";
 import { requestAuthorityAllowed } from "./shared/mcp-environment.js";
 
@@ -57,6 +57,8 @@ export interface McpRouteOptions {
    */
   allowedOrigins: string[];
   sessionIdleTimeoutMs: number;
+  /** Maximum requests per client in a 60-second window. */
+  rateLimitMaxRequests: number;
   /**
    * Sweep cadence. Defaults to the lesser of the idle timeout and 5 minutes,
    * so a short custom timeout doesn't wait a full default cycle to take
@@ -102,6 +104,10 @@ export function mountMcpRoute(
 ): { dispose: () => Promise<void> } {
   const transports: Record<string, StreamableHTTPServerTransport> = {};
   const sessionLastActivity: Record<string, number> = {};
+  const rateLimitWindows = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
 
   function checkHostAndOrigin(
     req: Request,
@@ -156,8 +162,27 @@ export function mountMcpRoute(
     next();
   }
 
+  function checkRateLimit(req: Request, res: Response, next: () => void): void {
+    const client = req.socket.remoteAddress ?? "unknown";
+    const now = Date.now();
+    const current = rateLimitWindows.get(client);
+    const window =
+      !current || current.resetAt <= now
+        ? { count: 0, resetAt: now + 60_000 }
+        : current;
+    window.count += 1;
+    rateLimitWindows.set(client, window);
+    if (window.count > opts.rateLimitMaxRequests) {
+      res.setHeader("Retry-After", Math.ceil((window.resetAt - now) / 1_000));
+      res.status(429).json({ error: "Too many requests" });
+      return;
+    }
+    next();
+  }
+
   const middlewares = [
     checkHostAndOrigin,
+    checkRateLimit,
     checkBearerToken,
     ...(opts.authMiddleware ? [opts.authMiddleware] : []),
   ];
@@ -235,6 +260,9 @@ export function mountMcpRoute(
     opts.sweepIntervalMs ?? Math.min(opts.sessionIdleTimeoutMs, 5 * 60_000);
   const sweep = setInterval(() => {
     const now = Date.now();
+    for (const [client, window] of rateLimitWindows) {
+      if (window.resetAt <= now) rateLimitWindows.delete(client);
+    }
     for (const [id, lastActivity] of Object.entries(sessionLastActivity)) {
       if (now - lastActivity <= opts.sessionIdleTimeoutMs) continue;
       log.info("transport", "evicting idle session", {
