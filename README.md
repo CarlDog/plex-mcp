@@ -21,6 +21,7 @@ your Plex libraries.
 | `plex_on_deck` | Items "on deck" (partially watched / next up); optional `section_id` scopes to one library section |
 | `plex_get_item` | Metadata for one item by rating key. Pass `minimal=true` to drop bulky cast/crew/image arrays (~80% size reduction on movies with deep casts) while keeping subtitle-track info; pass `fields=[...]` for explicit projection |
 | `plex_browse` | List items in a library section (paged, optional type filter, optional `collection` title filter, optional sparse `fields` projection) |
+| `plex_find_by_external_id` | Find all exact IMDb/TMDB/TVDB child-GUID matches in one section via a bounded paged scan; returns lean identity/context rows and reports whether the result is complete or truncated |
 | `plex_list_collections` | List collections in a library section (thin wrapper over `plex_browse`'s collection type) |
 | `plex_get_children` | Children of an item (show→seasons, season→episodes, artist→albums) |
 | `plex_now_playing` | Currently-playing sessions on the server |

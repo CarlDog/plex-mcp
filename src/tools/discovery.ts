@@ -229,6 +229,62 @@ export function registerDiscoveryTools(
   );
 
   server.registerTool(
+    "plex_find_by_external_id",
+    {
+      title: "Find Plex Item by External ID",
+      description:
+        "Find every item in one library section whose child Guid[] contains an exact IMDb, TMDB, or TVDB ID. This performs a bounded paged section scan because Plex's direct guid filter does not resolve these child IDs reliably. Matches use a lean identity/context projection. The response reports complete/truncated, scanned, and total; do not treat an empty truncated result as authoritative.",
+      inputSchema: {
+        section_id: z
+          .string()
+          .describe("Library section ID (from plex_list_libraries)"),
+        source: z.enum(["imdb", "tmdb", "tvdb"]).describe("ID provider"),
+        external_id: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9._-]+$/)
+          .describe(
+            "Provider-native ID without a URI prefix, such as tt0133093 or 1396",
+          ),
+        type: z
+          .enum([
+            "movie",
+            "show",
+            "season",
+            "episode",
+            "artist",
+            "album",
+            "track",
+          ])
+          .optional()
+          .describe("Optional Plex item-type filter"),
+        max_items: z
+          .number()
+          .int()
+          .positive()
+          .max(50_000)
+          .optional()
+          .describe(
+            "Maximum section rows to scan (default 10000, hard maximum 50000)",
+          ),
+      },
+      annotations: READ_ONLY_ANNOTATIONS,
+    },
+    withLogging(
+      "plex_find_by_external_id",
+      async ({ section_id, source, external_id, type, max_items }) =>
+        asText(
+          await plex.findByExternalId(section_id, source, external_id, {
+            type: type ? PLEX_TYPE_CODES[type] : undefined,
+            maxItems: max_items,
+          }),
+        ),
+    ),
+  );
+
+  server.registerTool(
     "plex_list_collections",
     {
       title: "List Plex Collections",

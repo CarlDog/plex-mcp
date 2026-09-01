@@ -1,6 +1,14 @@
 # Status
 
-**Last updated:** 2026-09-01 — rate-limited the HTTP `/mcp` route before bearer
+**Last updated:** 2026-09-01 — added the read-only
+`plex_find_by_external_id` tool. It performs a bounded, section-scoped
+`includeGuids=1` scan, compares exact child GUIDs, returns all matches, and
+reports whether the result is complete or truncated. This avoids Plex's direct
+`guid=` behavior, which did not resolve sampled IMDb/TMDB/TVDB child GUIDs.
+The 138-test local suite, build, typecheck, lint, and formatting pass; two
+focused live read-only integration cases also pass against the configured Plex
+server. No Plex state was mutated.
+Previous entry, 2026-09-01 — rate-limited the HTTP `/mcp` route before bearer
 or OAuth checks and before session allocation. Each client IP receives 60
 requests per 60-second window by default; excess requests receive `429` with a
 `Retry-After` header. Expired client windows share the existing unref'd session

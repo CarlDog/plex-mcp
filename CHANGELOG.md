@@ -13,6 +13,12 @@ the work rather than after the fact.
 
 ### Added
 
+- `plex_find_by_external_id(section_id, source, external_id)` — resolves exact
+  IMDb/TMDB/TVDB child GUIDs through a bounded, section-scoped
+  `includeGuids=1` page scan. It returns every match plus explicit
+  completion/truncation metadata rather than relying on Plex's ineffective
+  direct child-GUID filter or silently stopping at the first match.
+
 - Optional direct Tautulli integration with four read-only tools:
   `plex_tautulli_status`, `plex_tautulli_activity`,
   `plex_tautulli_history`, and `plex_tautulli_watch_time`. The integration is

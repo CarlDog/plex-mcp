@@ -18,6 +18,45 @@ interface PlexResponse<T> {
 // dict (plexapi/utils.py) — 'collection': 18.
 const PLEX_TYPE_COLLECTION = 18;
 
+export type PlexExternalIdSource = "imdb" | "tmdb" | "tvdb";
+
+const EXTERNAL_ID_SCAN_PAGE_SIZE = 200;
+const DEFAULT_EXTERNAL_ID_SCAN_MAX_ITEMS = 10_000;
+const MAX_EXTERNAL_ID_SCAN_ITEMS = 50_000;
+const EXTERNAL_ID_RESULT_FIELDS = [
+  "ratingKey",
+  "key",
+  "guid",
+  "Guid",
+  "type",
+  "title",
+  "year",
+  "originallyAvailableAt",
+  "librarySectionID",
+  "librarySectionTitle",
+  "parentRatingKey",
+  "parentTitle",
+  "grandparentRatingKey",
+  "grandparentTitle",
+  "index",
+  "parentIndex",
+];
+
+export function itemHasExternalGuid(
+  item: unknown,
+  targetGuid: string,
+): boolean {
+  if (typeof item !== "object" || item === null) return false;
+  const guids = (item as { Guid?: unknown }).Guid;
+  if (!Array.isArray(guids)) return false;
+  return guids.some(
+    (guid) =>
+      typeof guid === "object" &&
+      guid !== null &&
+      (guid as { id?: unknown }).id === targetGuid,
+  );
+}
+
 /**
  * Parse a positive-integer env var, falling back to `defaultValue` for
  * unset, empty-string, non-numeric, or non-positive values. Some MCP
@@ -671,6 +710,7 @@ export class PlexClient {
       type?: number;
       fields?: string[];
       collection?: string;
+      includeGuids?: boolean;
     } = {},
   ): Promise<{
     total: number;
@@ -695,6 +735,9 @@ export class PlexClient {
     // filtering system, same family as genre/director/studio.
     if (options.collection !== undefined) {
       params.collection = options.collection;
+    }
+    if (options.includeGuids) {
+      params.includeGuids = "1";
     }
     const data = await this.request<{
       Metadata?: unknown[];
@@ -723,6 +766,75 @@ export class PlexClient {
       offset,
       size: items.length,
       items,
+    };
+  }
+
+  /**
+   * Resolve a provider ID by scanning one library section's paged listing.
+   * Plex exposes IMDb/TMDB/TVDB IDs as child Guid[] entries when
+   * includeGuids=1; its `guid=` filter only matches the primary Plex GUID on
+   * tested servers, so this deliberately compares child GUIDs client-side.
+   *
+   * The scan is bounded and returns every exact match within the scanned
+   * range. Callers must inspect `complete`/`truncated` before treating an empty
+   * result as authoritative.
+   */
+  async findByExternalId(
+    sectionId: string,
+    source: PlexExternalIdSource,
+    externalId: string,
+    options: { type?: number; maxItems?: number } = {},
+  ): Promise<{
+    sectionId: string;
+    source: PlexExternalIdSource;
+    externalId: string;
+    targetGuid: string;
+    scanned: number;
+    total: number;
+    complete: boolean;
+    truncated: boolean;
+    matches: unknown[];
+  }> {
+    const normalizedExternalId = externalId.trim().toLowerCase();
+    const targetGuid = `${source}://${normalizedExternalId}`;
+    const requestedMaxItems = options.maxItems;
+    const maxItems =
+      requestedMaxItems !== undefined &&
+      Number.isFinite(requestedMaxItems) &&
+      requestedMaxItems > 0
+        ? Math.min(Math.trunc(requestedMaxItems), MAX_EXTERNAL_ID_SCAN_ITEMS)
+        : DEFAULT_EXTERNAL_ID_SCAN_MAX_ITEMS;
+    const matches: unknown[] = [];
+    let scanned = 0;
+    let total = 0;
+
+    while (scanned < maxItems) {
+      const page = await this.browse(sectionId, {
+        offset: scanned,
+        limit: Math.min(EXTERNAL_ID_SCAN_PAGE_SIZE, maxItems - scanned),
+        type: options.type,
+        includeGuids: true,
+        fields: EXTERNAL_ID_RESULT_FIELDS,
+      });
+      total = page.total;
+      for (const item of page.items) {
+        if (itemHasExternalGuid(item, targetGuid)) matches.push(item);
+      }
+      scanned += page.size;
+      if (page.size === 0 || scanned >= total) break;
+    }
+
+    const complete = scanned >= total;
+    return {
+      sectionId,
+      source,
+      externalId: normalizedExternalId,
+      targetGuid,
+      scanned,
+      total,
+      complete,
+      truncated: !complete,
+      matches,
     };
   }
 

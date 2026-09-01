@@ -1,8 +1,7 @@
 // REQUIRED ENFORCEMENT TEST — fleet standard MCP-T02.
 //
 // Every tool name must carry the plex_ prefix, be lower_snake_case, and be
-// unique. The property already holds across all 31 registered tools; this
-// keeps it from silently regressing as tools are added.
+// unique. This keeps the property from silently regressing as tools are added.
 
 import { describe, expect, test } from "vitest";
 import type { PlexClient } from "../src/plex.js";

@@ -44,6 +44,9 @@ interface Fixtures {
   collectionRatingKey: string | null;
   collectionTitle: string | null;
   inProgressRatingKey: string | null;
+  externalIdSource: "imdb" | "tmdb" | "tvdb" | null;
+  externalId: string | null;
+  externalIdRatingKey: string | null;
 }
 
 describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
@@ -72,6 +75,32 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       throw new Error(
         `Test fixture: show-type section ${showLib.key} has no shows`,
       );
+    }
+
+    // Discover a real external-ID fixture from the same endpoint shape used
+    // by findByExternalId. Do not assume every item or server agent exposes
+    // IMDb/TMDB/TVDB child GUIDs.
+    let externalIdSource: "imdb" | "tmdb" | "tvdb" | null = null;
+    let externalId: string | null = null;
+    let externalIdRatingKey: string | null = null;
+    const externalIdCandidates = await client.browse(showLib.key, {
+      type: 2,
+      limit: 200,
+      includeGuids: true,
+    });
+    for (const item of externalIdCandidates.items as Array<{
+      ratingKey?: string;
+      Guid?: Array<{ id?: string }>;
+    }>) {
+      const match = item.Guid?.map((guid) => guid.id).find((id) =>
+        /^(?:imdb|tmdb|tvdb):\/\/[A-Za-z0-9._-]+$/u.test(id ?? ""),
+      );
+      if (!item.ratingKey || !match) continue;
+      const separator = match.indexOf("://");
+      externalIdSource = match.slice(0, separator) as "imdb" | "tmdb" | "tvdb";
+      externalId = match.slice(separator + 3);
+      externalIdRatingKey = item.ratingKey;
+      break;
     }
 
     const historyResult = await client.history({ limit: 1 });
@@ -115,8 +144,11 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       collectionRatingKey,
       collectionTitle,
       inProgressRatingKey: inProgressItem?.ratingKey ?? null,
+      externalIdSource,
+      externalId,
+      externalIdRatingKey,
     };
-  });
+  }, 30_000);
 
   it("listLibraries returns a non-empty array", async () => {
     const libs = await client.listLibraries();
@@ -503,6 +535,45 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
           (i) => i.type === "show",
         ),
       ).toBe(true);
+    });
+  });
+
+  describe("external ID lookup", () => {
+    it("finds a real child GUID by scanning its library section", async () => {
+      if (
+        !fixtures.externalIdSource ||
+        !fixtures.externalId ||
+        !fixtures.externalIdRatingKey
+      ) {
+        return;
+      }
+      const result = await client.findByExternalId(
+        fixtures.showSectionId,
+        fixtures.externalIdSource,
+        fixtures.externalId,
+        { type: 2 },
+      );
+      expect(result.complete).toBe(true);
+      expect(result.truncated).toBe(false);
+      expect(result.scanned).toBe(result.total);
+      expect(
+        (result.matches as Array<{ ratingKey?: string }>).some(
+          (item) => item.ratingKey === fixtures.externalIdRatingKey,
+        ),
+      ).toBe(true);
+    });
+
+    it("discloses truncation instead of claiming an exhaustive miss", async () => {
+      if (!fixtures.externalIdSource || !fixtures.externalId) return;
+      const result = await client.findByExternalId(
+        fixtures.showSectionId,
+        fixtures.externalIdSource,
+        fixtures.externalId,
+        { type: 2, maxItems: 1 },
+      );
+      expect(result.scanned).toBe(1);
+      expect(result.complete).toBe(result.total <= 1);
+      expect(result.truncated).toBe(result.total > 1);
     });
   });
 
