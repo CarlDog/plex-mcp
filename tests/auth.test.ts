@@ -8,8 +8,6 @@
 // the IdP itself is a local stand-in (no live Auth0/Logto tenant
 // exists yet — that's Phase 3).
 
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
 import express from "express";
 import {
   SignJWT,
@@ -18,6 +16,8 @@ import {
   type JWK,
   type KeyLike,
 } from "jose";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
   afterAll,
   afterEach,
@@ -57,6 +57,12 @@ beforeAll(async () => {
   idpApp.get("/.well-known/jwks.json", (_req, res) => {
     res.json({ keys: [publicJwk] });
   });
+  idpApp.get("/cross/.well-known/openid-configuration", (_req, res) => {
+    res.json({
+      issuer: `${idpUrl}/cross`,
+      jwks_uri: "https://untrusted.example/jwks.json",
+    });
+  });
 
   idpServer = await new Promise((resolve) => {
     const s = idpApp.listen(0, "127.0.0.1", () => resolve(s));
@@ -72,6 +78,7 @@ afterAll(async () => {
 function authConfig(): AuthConfig {
   return {
     issuer: idpUrl,
+    issuerUrl: new URL(idpUrl),
     audience: AUDIENCE,
     requiredScopes: REQUIRED_SCOPES,
   };
@@ -213,6 +220,19 @@ describe("createAuthMiddleware", () => {
     });
     expect(res.status).toBe(401);
   });
+
+  test("cross-origin jwks_uri in discovery -> 401 without fetching it", async () => {
+    harness = await startTestApp({
+      ...authConfig(),
+      issuer: `${idpUrl}/cross`,
+      issuerUrl: new URL(`${idpUrl}/cross`),
+    });
+    const token = await signToken({ iss: `${idpUrl}/cross` });
+    const res = await fetch(harness.url, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(401);
+  });
 });
 
 describe("loadAuthConfig", () => {
@@ -234,6 +254,22 @@ describe("loadAuthConfig", () => {
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
       throw new Error("process.exit called");
     }) as unknown as (code?: number) => never;
+    expect(() => loadAuthConfig()).toThrow("process.exit called");
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  test.each([
+    "http://idp.example.test",
+    "https://user:password@idp.example.test",
+    "https://idp.example.test?next=https://internal.example",
+    "https://idp.example.test#fragment",
+  ])("exits when ISSUER is not a clean HTTPS URL: %s", (issuer) => {
+    process.env.MCP_OAUTH_ISSUER = issuer;
+    process.env.MCP_OAUTH_AUDIENCE = AUDIENCE;
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process.exit called");
+    }) as unknown as (code?: number) => never;
+
     expect(() => loadAuthConfig()).toThrow("process.exit called");
     expect(exitSpy).toHaveBeenCalledWith(1);
   });

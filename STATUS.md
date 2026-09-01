@@ -1,6 +1,11 @@
 # Status
 
-**Last updated:** 2026-08-29 — implemented an optional direct Tautulli client and
+**Last updated:** 2026-09-01 — hardened OAuth OIDC discovery against
+configuration-driven SSRF. `MCP_OAUTH_ISSUER` now accepts only clean HTTPS
+issuer URLs, and its discovery document may only name a same-origin JWKS URL;
+the existing local OIDC harness plus five new rejection cases verifies both
+boundaries. OAuth remains opt-in and no live deployment configuration changed.
+Previous entry, 2026-08-29 — implemented an optional direct Tautulli client and
 four read-only `plex_tautulli_*` tools. Disabled, partially configured, and
 unreachable Tautulli states leave existing Plex tools and `/health` unchanged;
 normalized outputs exclude sensitive source fields. All three environment

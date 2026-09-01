@@ -27,11 +27,37 @@ import { log } from "./log.js";
 
 export interface AuthConfig {
   issuer: string;
+  issuerUrl: URL;
   audience: string;
   requiredScopes: string[];
 }
 
 const DEFAULT_REQUIRED_SCOPES = "plex:read";
+
+function loadIssuerUrl(issuer: string): URL {
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    log.error("auth", "MCP_OAUTH_ISSUER must be a valid HTTPS URL");
+    process.exit(1);
+  }
+
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    log.error(
+      "auth",
+      "MCP_OAUTH_ISSUER must be an HTTPS origin or path with no credentials, query, or fragment",
+    );
+    process.exit(1);
+  }
+  return url;
+}
 
 /**
  * Read MCP_OAUTH_* env vars. Returns `null` when MCP_OAUTH_ISSUER is
@@ -46,6 +72,7 @@ export function loadAuthConfig(): AuthConfig | null {
   const issuer = process.env.MCP_OAUTH_ISSUER;
   if (!issuer) return null;
 
+  const issuerUrl = loadIssuerUrl(issuer);
   const audience = process.env.MCP_OAUTH_AUDIENCE;
   if (!audience) {
     log.error(
@@ -62,7 +89,7 @@ export function loadAuthConfig(): AuthConfig | null {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  return { issuer, audience, requiredScopes };
+  return { issuer, issuerUrl, audience, requiredScopes };
 }
 
 // Cache the resolved JWKS getter per issuer. createRemoteJWKSet already
@@ -70,35 +97,44 @@ export function loadAuthConfig(): AuthConfig | null {
 // only saves re-running OIDC discovery on every request.
 let cachedJwks: { issuer: string; getKey: JWTVerifyGetKey } | undefined;
 
-async function resolveJwks(issuer: string): Promise<JWTVerifyGetKey> {
-  if (cachedJwks?.issuer === issuer) return cachedJwks.getKey;
+async function resolveJwks(issuer: URL): Promise<JWTVerifyGetKey> {
+  const issuerString = issuer.toString();
+  if (cachedJwks?.issuer === issuerString) return cachedJwks.getKey;
 
   // OIDC Discovery 1.0: append to the issuer's existing path (if any),
   // don't replace it — a multi-tenant IdP's issuer can carry a path
   // (e.g. https://idp.example.com/realm/foo).
   const discoveryUrl = new URL(
-    `${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`,
+    `${issuerString.replace(/\/+$/, "")}/.well-known/openid-configuration`,
   );
   let res: globalThis.Response;
   try {
     res = await fetch(discoveryUrl);
   } catch (err) {
     throw new Error(
-      `OIDC discovery failed for ${issuer}: ${describeTransportError(err)}`,
+      `OIDC discovery failed for ${issuerString}: ${describeTransportError(err)}`,
       { cause: err },
     );
   }
   if (!res.ok) {
     throw new Error(
-      `OIDC discovery failed for ${issuer}: ${res.status} ${res.statusText}`,
+      `OIDC discovery failed for ${issuerString}: ${res.status} ${res.statusText}`,
     );
   }
   const doc = (await res.json()) as { jwks_uri?: string };
   if (!doc.jwks_uri) {
-    throw new Error(`OIDC discovery document for ${issuer} has no jwks_uri`);
+    throw new Error(
+      `OIDC discovery document for ${issuerString} has no jwks_uri`,
+    );
   }
-  const getKey = createRemoteJWKSet(new URL(doc.jwks_uri));
-  cachedJwks = { issuer, getKey };
+  const jwksUrl = new URL(doc.jwks_uri);
+  if (jwksUrl.origin !== issuer.origin) {
+    throw new Error(
+      `OIDC discovery document for ${issuerString} returned a cross-origin jwks_uri`,
+    );
+  }
+  const getKey = createRemoteJWKSet(jwksUrl);
+  cachedJwks = { issuer: issuerString, getKey };
   return getKey;
 }
 
@@ -149,7 +185,7 @@ export function createAuthMiddleware(config: AuthConfig) {
 
     let scopeClaim: unknown;
     try {
-      const getKey = await resolveJwks(config.issuer);
+      const getKey = await resolveJwks(config.issuerUrl);
       const { payload } = await jwtVerify(token, getKey, {
         issuer: config.issuer,
         audience: config.audience,

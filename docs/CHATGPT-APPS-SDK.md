@@ -114,7 +114,7 @@ per the MCP spec.
 
 | Var | Notes |
 | --- | --- |
-| `MCP_OAUTH_ISSUER` | IdP issuer URL. Used to fetch `.well-known/openid-configuration` and JWKS. Setting this opts in to auth. |
+| `MCP_OAUTH_ISSUER` | HTTPS IdP issuer URL, with no credentials, query, or fragment. Used to fetch `.well-known/openid-configuration`; its `jwks_uri` must remain on the same origin. Setting this opts in to auth. |
 | `MCP_OAUTH_AUDIENCE` | Expected `aud` claim. Should equal the canonical resource URI. |
 | `MCP_OAUTH_REQUIRED_SCOPES` | Comma-separated. Default `plex:read`. |
 | `MCP_OAUTH_ALLOW_HEALTH_ANONYMOUS` | Default `true` — keep `/health` accessible for the Docker healthcheck. |
@@ -122,6 +122,11 @@ per the MCP spec.
 When `MCP_OAUTH_ISSUER` is unset, the server stays on today's
 no-auth behavior (so the existing LAN deployment is unaffected).
 Auth is opt-in, parallel to how HTTPS is opt-in.
+
+The issuer is deployment configuration, not a request parameter, but it is
+still an outbound-request boundary. Rejecting malformed/non-HTTPS issuers and
+cross-origin JWKS discovery prevents a mistaken or compromised configuration
+from turning token validation into an arbitrary fetch.
 
 ### 5. Tool annotation pass (independent of auth, do anytime)
 

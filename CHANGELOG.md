@@ -40,6 +40,14 @@ the work rather than after the fact.
 
 ### Changed
 
+- **Hardened opt-in OAuth OIDC discovery against configuration-driven SSRF.**
+  `MCP_OAUTH_ISSUER` must now be a clean HTTPS issuer URL with no credentials,
+  query, or fragment, and OIDC discovery may only use a same-origin `jwks_uri`.
+  JWT validation preserves the configured issuer string exactly; the new URL is
+  used solely for outbound discovery. Covered by rejection tests for malformed
+  issuers and a cross-origin JWKS discovery document. OAuth remains unset in the
+  live deployment, so this does not require an operator configuration change.
+
 - **`MCP_ALLOWED_HOSTS` matching is now hostname-only and port-independent,
   aligned with the rest of the fleet.** The Host allowlist previously
   required an exact `host:port` match (e.g. `nas.local:3001`), a holdover
