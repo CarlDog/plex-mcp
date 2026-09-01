@@ -25,7 +25,7 @@
 // unaffected, and it reappears on its own the next time it's resumed
 // in any client, so this is a cosmetic, self-healing side effect, not
 // data loss.
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PlexClient } from "../src/plex.js";
 
 const PLEX_URL = process.env.PLEX_URL;
@@ -307,6 +307,7 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     const { tmpdir } = await import("node:os");
     const { join: pathJoin } = await import("node:path");
     const dir = mkdtempSync(pathJoin(tmpdir(), "plex-mcp-save-"));
+    const expectedPath = pathJoin(dir, "fixture.jpg");
     const prev = process.env.MCP_IMAGE_SAVE_DIR;
     process.env.MCP_IMAGE_SAVE_DIR = dir;
     try {
@@ -315,11 +316,11 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
         filename: "fixture.jpg",
         maxWidth: 200,
       });
-      expect(result.path).toBe(pathJoin(dir, "fixture.jpg"));
+      expect(result.path).toBe(expectedPath);
       expect(result.bytes_written).toBeGreaterThan(0);
       expect(result.mime_type).toMatch(/^image\//);
-      expect(existsSync(result.path)).toBe(true);
-      const bytes = readFileSync(result.path);
+      expect(existsSync(expectedPath)).toBe(true);
+      const bytes = readFileSync(expectedPath);
       const head = bytes.subarray(0, 4).toString("hex").toUpperCase();
       expect(head.startsWith("FFD8FF") || head.startsWith("89504E47")).toBe(
         true,
@@ -355,16 +356,17 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     const { tmpdir } = await import("node:os");
     const { join: pathJoin } = await import("node:path");
     const dir = mkdtempSync(pathJoin(tmpdir(), "plex-mcp-logs-"));
+    const expectedPath = pathJoin(dir, "fixture-logs.zip");
     const prev = process.env.MCP_LOG_SAVE_DIR;
     process.env.MCP_LOG_SAVE_DIR = dir;
     try {
       const result = await client.downloadLogs({
         filename: "fixture-logs.zip",
       });
-      expect(result.path).toBe(pathJoin(dir, "fixture-logs.zip"));
+      expect(result.path).toBe(expectedPath);
       expect(result.bytes_written).toBeGreaterThan(0);
-      expect(existsSync(result.path)).toBe(true);
-      const bytes = readFileSync(result.path);
+      expect(existsSync(expectedPath)).toBe(true);
+      const bytes = readFileSync(expectedPath);
       // ZIP local-file-header magic: "PK\x03\x04" (or PK\x05\x06 for
       // an empty archive, PK\x07\x08 for a spanned one) — confirms
       // the response really is a ZIP, per the research's structural
