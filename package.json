@@ -27,7 +27,7 @@
     "express": "^5.2.1",
     "jose": "^6.2.10",
     "selfsigned": "^5.5.0",
-    "zod": "^4.5.2"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
