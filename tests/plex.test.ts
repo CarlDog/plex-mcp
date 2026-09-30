@@ -678,7 +678,7 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
   // Full CRUD round-trip on regular playlists. Creates a temp
   // playlist, adds/removes items, deletes it. Cleanup in afterAll
   // in case any step fails partway through.
-  describe.sequential("playlist round trip (CRUD)", () => {
+  describe("playlist round trip (CRUD)", { concurrent: false }, () => {
     let playlistId: string | undefined;
     let item1Key: string;
     let item2Key: string;
@@ -833,7 +833,7 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
   // fixture is left unmatched — afterAll attempts a best-effort
   // restore. Skipped when the fixture starts on agents.none / a
   // local-only GUID (nothing to restore to).
-  describe.sequential("unmatch round trip", () => {
+  describe("unmatch round trip", { concurrent: false }, () => {
     let originalGuid: string | undefined;
     let originalTitle: string | undefined;
 
@@ -910,48 +910,54 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
   // mark_watched test below — accepted because the value itself is
   // restored. If a future audit flags a "locked summary" anomaly on
   // the first show in the show-type library, that's this test.
-  describe.sequential("editMetadata round trip (summary field)", () => {
-    let originalSummary: string;
+  describe(
+    "editMetadata round trip (summary field)",
+    { concurrent: false },
+    () => {
+      let originalSummary: string;
 
-    beforeAll(async () => {
-      const item = (await client.getItem(fixtures.showRatingKey)) as {
-        summary?: string;
-      };
-      originalSummary = item.summary ?? "";
-    });
+      beforeAll(async () => {
+        const item = (await client.getItem(fixtures.showRatingKey)) as {
+          summary?: string;
+        };
+        originalSummary = item.summary ?? "";
+      });
 
-    afterAll(async () => {
-      // Best-effort restore even if a test mid-block failed. Empty
-      // string is a valid Plex summary; we don't want to leave the
-      // fixture with our sentinel.
-      try {
+      afterAll(async () => {
+        // Best-effort restore even if a test mid-block failed. Empty
+        // string is a valid Plex summary; we don't want to leave the
+        // fixture with our sentinel.
+        try {
+          await client.editMetadata(fixtures.showRatingKey, {
+            summary: originalSummary,
+          });
+        } catch {
+          // already-restored or transient — not worth failing afterAll
+        }
+      });
+
+      it("sets and reads back a sentinel summary", async () => {
+        const sentinel = `plex-mcp editMetadata test ${Date.now()}`;
+        await client.editMetadata(fixtures.showRatingKey, {
+          summary: sentinel,
+        });
+        const after = (await client.getItem(fixtures.showRatingKey)) as {
+          summary?: string;
+        };
+        expect(after.summary).toBe(sentinel);
+      });
+
+      it("restores the original summary", async () => {
         await client.editMetadata(fixtures.showRatingKey, {
           summary: originalSummary,
         });
-      } catch {
-        // already-restored or transient — not worth failing afterAll
-      }
-    });
-
-    it("sets and reads back a sentinel summary", async () => {
-      const sentinel = `plex-mcp editMetadata test ${Date.now()}`;
-      await client.editMetadata(fixtures.showRatingKey, { summary: sentinel });
-      const after = (await client.getItem(fixtures.showRatingKey)) as {
-        summary?: string;
-      };
-      expect(after.summary).toBe(sentinel);
-    });
-
-    it("restores the original summary", async () => {
-      await client.editMetadata(fixtures.showRatingKey, {
-        summary: originalSummary,
+        const after = (await client.getItem(fixtures.showRatingKey)) as {
+          summary?: string;
+        };
+        expect(after.summary).toBe(originalSummary);
       });
-      const after = (await client.getItem(fixtures.showRatingKey)) as {
-        summary?: string;
-      };
-      expect(after.summary).toBe(originalSummary);
-    });
-  });
+    },
+  );
 
   // SIDE EFFECT: exercises uploadPoster/setPoster against a real item's
   // real poster selection. afterAll restores the original selection
@@ -959,8 +965,9 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
   // (no per-candidate delete endpoint exists — confirmed against
   // python-plexapi) so it's left in the item's candidate list as
   // harmless clutter, same as any real upload would leave.
-  describe.sequential(
+  describe(
     "poster round trip (list / upload / set / restore)",
+    { concurrent: false },
     () => {
       let originalSelectedPosterKey: string | undefined;
       let uploadedPosterKey: string | undefined;
@@ -1060,7 +1067,7 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     },
   );
 
-  describe.sequential("rateItem round trip", () => {
+  describe("rateItem round trip", { concurrent: false }, () => {
     let originalRating: number | undefined;
 
     beforeAll(async () => {
@@ -1130,36 +1137,40 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     });
   });
 
-  // .sequential because we don't want parallel mutations on the
+  // Disable concurrency because we don't want parallel mutations on the
   // same item across other (hypothetical future) write tests.
-  describe.sequential("mark_watched / mark_unwatched round trip", () => {
-    it("round trip restores watched state", async () => {
-      if (!fixtures.roundTripRatingKey) {
-        // No history entries on this server; nothing to round-trip.
-        // Pass silently rather than fail — server is technically
-        // valid, just empty of watch activity.
-        console.warn("[skip] no history entries; round-trip not exercised");
-        return;
-      }
-      const targetKey = fixtures.roundTripRatingKey;
+  describe(
+    "mark_watched / mark_unwatched round trip",
+    { concurrent: false },
+    () => {
+      it("round trip restores watched state", async () => {
+        if (!fixtures.roundTripRatingKey) {
+          // No history entries on this server; nothing to round-trip.
+          // Pass silently rather than fail — server is technically
+          // valid, just empty of watch activity.
+          console.warn("[skip] no history entries; round-trip not exercised");
+          return;
+        }
+        const targetKey = fixtures.roundTripRatingKey;
 
-      await client.markUnwatched(targetKey);
-      const afterUnwatch = (await client.getItem(targetKey)) as {
-        viewCount?: number;
-      };
-      expect(afterUnwatch.viewCount ?? 0).toBe(0);
+        await client.markUnwatched(targetKey);
+        const afterUnwatch = (await client.getItem(targetKey)) as {
+          viewCount?: number;
+        };
+        expect(afterUnwatch.viewCount ?? 0).toBe(0);
 
-      await client.markWatched(targetKey);
-      const afterWatch = (await client.getItem(targetKey)) as {
-        viewCount?: number;
-        lastViewedAt?: number;
-      };
-      expect(afterWatch.viewCount ?? 0).toBeGreaterThanOrEqual(1);
-      // Don't compare to local Date.now() — Plex's clock can drift
-      // a few seconds from the test machine's clock, which would make
-      // this flaky. Just verify lastViewedAt got set.
-      expect(afterWatch.lastViewedAt).toBeDefined();
-      expect(afterWatch.lastViewedAt!).toBeGreaterThan(0);
-    });
-  });
+        await client.markWatched(targetKey);
+        const afterWatch = (await client.getItem(targetKey)) as {
+          viewCount?: number;
+          lastViewedAt?: number;
+        };
+        expect(afterWatch.viewCount ?? 0).toBeGreaterThanOrEqual(1);
+        // Don't compare to local Date.now() — Plex's clock can drift
+        // a few seconds from the test machine's clock, which would make
+        // this flaky. Just verify lastViewedAt got set.
+        expect(afterWatch.lastViewedAt).toBeDefined();
+        expect(afterWatch.lastViewedAt!).toBeGreaterThan(0);
+      });
+    },
+  );
 });
