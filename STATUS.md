@@ -1,20 +1,17 @@
 # Status
 
 **Last updated:** 2026-10-12 — added `plex_set_subtitle_stream` and
-`plex_set_audio_stream` (fork branch `feat/stream-selection`, proposed
-upstream as an issue). Both go through
-`PUT /library/parts/{partId}?subtitleStreamID|audioStreamID={id}&allParts=1`,
-with the part resolved from the stream id and the id validated against the
-item's `Media[].Part[].Stream[]` in a pure module (`src/stream-selection.ts`,
-unit-tested) before any request is sent. `stream_id=0` turns subtitles off;
-audio has no off. Responses carry `previous_stream_id` for undo. 14 new
-offline tests (locator + tool wiring) plus a gated live round-trip in
-`tests/plex.test.ts`. **Verified live 2026-10-12** against the real server:
-subtitle switch + restore on an episode (`PUT /library/parts/1`, 200,
-`selected` flag read back correctly), and audio switch + restore on a
-movie with French/English tracks via a one-off probe, since the test's
-discovered episode had a single audio track. No client-identity headers
-were needed.
+`plex_set_audio_stream`, both through
+`PUT /library/parts/{partId}?subtitleStreamID|audioStreamID={id}&allParts=1`.
+The part is resolved from the stream id and the id is validated against the
+item's `Media[].Part[].Stream[]` in a pure module (`src/stream-selection.ts`)
+before any request is sent. `stream_id=0` turns subtitles off; audio has no
+off. Responses carry `previous_stream_id` for undo. Verified live against the
+real server: subtitle switch + restore on an episode and audio switch +
+restore on a movie with two tracks; no client-identity headers needed, empty
+200 as with the other `PUT` mutations. 16 new offline tests (locator + tool
+wiring) plus a gated live round-trip in `tests/plex.test.ts`; build,
+typecheck, lint and formatting pass.
 Previous entry, 2026-09-01 — added the read-only
 `plex_find_by_external_id` tool. It performs a bounded, section-scoped
 `includeGuids=1` scan, compares exact child GUIDs, returns all matches, and

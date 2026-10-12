@@ -1238,13 +1238,30 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
       expect(selectedOf(after!, 2)).toBe(originalAudio);
     });
 
-    it("refuses an id that is not a subtitle stream without calling Plex", async () => {
+    it("rejects a non-subtitle stream id before any PUT is sent", async () => {
       if (!candidate) return;
       const video = candidate.part.Stream!.find((s) => s.streamType === 1);
-      if (!video) return;
-      await expect(
-        client.setSubtitleStream(candidate.ratingKey, video.id),
-      ).rejects.toThrow(/not a subtitle stream/);
+      if (!video) {
+        console.warn("[skip] candidate has no video stream to misuse");
+        return;
+      }
+      // Count PUTs rather than trusting the error text: a regression that
+      // moved the kind check after the request would still throw the
+      // same message.
+      const originalFetch = globalThis.fetch;
+      let puts = 0;
+      globalThis.fetch = (async (input, init) => {
+        if (init?.method === "PUT") puts += 1;
+        return originalFetch(input, init);
+      }) as typeof fetch;
+      try {
+        await expect(
+          client.setSubtitleStream(candidate.ratingKey, video.id),
+        ).rejects.toThrow(/not a subtitle stream/);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+      expect(puts).toBe(0);
     });
   });
 

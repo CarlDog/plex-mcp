@@ -1,29 +1,40 @@
 // Pure stream-selection logic for plex_set_subtitle_stream /
 // plex_set_audio_stream. Kept free of I/O so it can be unit-tested
-// against literal item shapes without a Plex server.
+// against literal item shapes without a Plex server; PlexClient only
+// calls selectPartStreamParams() and sends what it returns.
 //
-// Plex's Stream.streamType: 1 = video, 2 = audio, 3 = subtitle (see
-// PlexClient.getItem's minimal-mode comment for how that was confirmed).
+// "Stream" is Plex's own word for every track inside a media part —
+// Media[].Part[].Stream[] with streamType 1 = video, 2 = audio,
+// 3 = subtitle (provenance in PlexClient.getItem's minimal-mode comment).
 // Selection is per media *part*: `PUT /library/parts/{partId}?
 // subtitleStreamID={id}&allParts=1` (or `audioStreamID`). The caller
 // supplies a stream id, and this module finds which part owns it — that
 // lookup doubles as validation: an id that isn't on this item, or is the
 // wrong kind of stream, is refused before anything is sent to Plex.
 
-export const AUDIO_STREAM_TYPE = 2;
-export const SUBTITLE_STREAM_TYPE = 3;
-
 export type StreamKind = "audio" | "subtitle";
 
-export const STREAM_TYPE_BY_KIND: Record<StreamKind, number> = {
-  audio: AUDIO_STREAM_TYPE,
-  subtitle: SUBTITLE_STREAM_TYPE,
+const STREAM_TYPE_BY_KIND: Record<StreamKind, number> = {
+  audio: 2,
+  subtitle: 3,
 };
 
-export const STREAM_PARAM_BY_KIND: Record<StreamKind, string> = {
+const KIND_LABEL: Record<StreamKind, string> = {
+  audio: "an audio",
+  subtitle: "a subtitle",
+};
+
+const STREAM_PARAM_BY_KIND: Record<StreamKind, string> = {
   audio: "audioStreamID",
   subtitle: "subtitleStreamID",
 };
+
+export interface StreamSelectionResult {
+  partId: string;
+  selectedStreamId: number;
+  /** Previously selected stream of the same kind in that part; 0 if none. */
+  previousStreamId: number;
+}
 
 export interface StreamLocation {
   /** The Media.Part id whose stream selection will be changed. */
@@ -71,8 +82,9 @@ function selectedStreamId(part: PlexPart, kind: StreamKind): number {
  * was selected there before.
  *
  * - `streamId > 0`: the part is the one whose `Stream[]` contains that
- *   id, and the stream must be of `kind`. `partId` is ignored — the
- *   stream itself pins the part.
+ *   id, and the stream must be of `kind`. The stream itself pins the
+ *   part, so a `partId` that names a different part is a contradiction
+ *   and is refused rather than silently ignored.
  * - `streamId === 0` ("off", subtitles only): there is no stream to
  *   derive the part from, so the first part is used unless `partId`
  *   names one explicitly (items with several versions/files).
@@ -120,7 +132,12 @@ export function locateStream(
     const wanted = STREAM_TYPE_BY_KIND[kind];
     if (stream.streamType !== wanted) {
       throw new Error(
-        `stream_id ${streamId} is not a ${kind} stream on this item (streamType ${String(stream.streamType)}, expected ${wanted})`,
+        `stream_id ${streamId} is not ${KIND_LABEL[kind]} stream on this item (streamType ${String(stream.streamType)}, expected ${wanted})`,
+      );
+    }
+    if (partId !== undefined && String(part.id) !== partId) {
+      throw new Error(
+        `stream_id ${streamId} belongs to part ${String(part.id)}, not part_id ${partId} — omit part_id (it is only needed with stream_id 0) or pass the matching one`,
       );
     }
     return {
@@ -138,4 +155,32 @@ export function locateStream(
       available.length > 0 ? available.join(", ") : "none"
     })`,
   );
+}
+
+/**
+ * Everything PlexClient needs for one selection call: the part to PUT
+ * to, the query params, and the result to hand back. Keeps the
+ * endpoint's parameter names and the response contract in this module
+ * so plex.ts stays a thin transport.
+ */
+export function selectPartStreamParams(
+  item: Record<string, unknown>,
+  kind: StreamKind,
+  streamId: number,
+  partId?: string,
+): {
+  partId: string;
+  params: Record<string, string>;
+  result: StreamSelectionResult;
+} {
+  const location = locateStream(item, kind, streamId, partId);
+  return {
+    partId: location.partId,
+    params: { [STREAM_PARAM_BY_KIND[kind]]: String(streamId), allParts: "1" },
+    result: {
+      partId: location.partId,
+      selectedStreamId: streamId,
+      previousStreamId: location.previousStreamId,
+    },
+  };
 }

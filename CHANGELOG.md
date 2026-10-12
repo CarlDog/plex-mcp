@@ -20,8 +20,9 @@ the work rather than after the fact.
   The owning media part is resolved from the stream id and the id is
   verified to be the right kind of stream on that item before anything is
   sent (`src/stream-selection.ts`). `stream_id=0` turns subtitles off; audio
-  has no off. Both return `previous_stream_id` so the change can be reverted.
-  Selection is per Plex account.
+  has no off. Both return `previous_stream_id` so the change can be reverted
+  (`null` for audio when no track was explicitly selected before, since
+  that state has no id to pass back). Selection is per Plex account.
 - `plex_find_by_external_id(section_id, source, external_id)` — resolves exact
   IMDb/TMDB/TVDB child GUIDs through a bounded, section-scoped
   `includeGuids=1` page scan. It returns every match plus explicit

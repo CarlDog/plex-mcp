@@ -128,7 +128,7 @@ export function registerPlaybackTools(
           .string()
           .optional()
           .describe(
-            "Only used with stream_id=0 on items with several media parts: the Media.Part id to turn subtitles off on. Defaults to the first part.",
+            "Only needed with stream_id=0 on items with several media parts: the Media.Part id to turn subtitles off on. Defaults to the first part. With a non-zero stream_id the part is derived from the stream, and a part_id that names a different part is rejected.",
           ),
       },
       annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
@@ -156,7 +156,7 @@ export function registerPlaybackTools(
     {
       title: "Select Plex Audio Stream",
       description:
-        "Select which audio track plays for an item (mutates server state). Pass a stream id from the item's Media[].Part[].Stream[] (streamType 2 entries in the full plex_get_item response — minimal mode drops audio streams); the owning media part is resolved automatically and the id is verified to be an audio stream on this item. There is no 'off' for audio. Selection is per Plex account (the PLEX_TOKEN user). Reversible: the response includes previous_stream_id — call again with it to restore.",
+        "Select which audio track plays for an item (mutates server state). Pass a stream id from the item's Media[].Part[].Stream[] (streamType 2 entries in the full plex_get_item response — minimal mode drops audio streams); the owning media part is resolved automatically and the id is verified to be an audio stream on this item. There is no 'off' for audio. Selection is per Plex account (the PLEX_TOKEN user). Reversible: the response includes previous_stream_id — call again with it to restore. previous_stream_id is null when no audio track was explicitly selected before (Plex was using its default); that state cannot be restored by this tool.",
       inputSchema: {
         rating_key: z
           .string()
@@ -177,7 +177,10 @@ export function registerPlaybackTools(
         rating_key,
         part_id: result.partId,
         selected_stream_id: result.selectedStreamId,
-        previous_stream_id: result.previousStreamId,
+        // 0 means "nothing was explicitly selected", and 0 is not a valid
+        // audio stream_id (no audio off), so report null rather than a
+        // value the model would try to pass back.
+        previous_stream_id: result.previousStreamId || null,
       });
     }),
   );

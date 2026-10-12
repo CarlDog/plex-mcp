@@ -26,9 +26,7 @@ type Schema = Record<
 describe("plex_set_subtitle_stream", () => {
   it("calls setSubtitleStream and returns the selection result", async () => {
     const setSubtitleStream = vi.fn().mockResolvedValue({
-      ratingKey: "100",
       partId: "10",
-      kind: "subtitle",
       selectedStreamId: 105,
       previousStreamId: 104,
     });
@@ -51,9 +49,7 @@ describe("plex_set_subtitle_stream", () => {
 
   it("forwards part_id for the off case", async () => {
     const setSubtitleStream = vi.fn().mockResolvedValue({
-      ratingKey: "100",
       partId: "20",
-      kind: "subtitle",
       selectedStreamId: 0,
       previousStreamId: 0,
     });
@@ -77,9 +73,7 @@ describe("plex_set_subtitle_stream", () => {
 describe("plex_set_audio_stream", () => {
   it("calls setAudioStream and returns the selection result", async () => {
     const setAudioStream = vi.fn().mockResolvedValue({
-      ratingKey: "100",
       partId: "10",
-      kind: "audio",
       selectedStreamId: 103,
       previousStreamId: 102,
     });
@@ -98,6 +92,22 @@ describe("plex_set_audio_stream", () => {
       selected_stream_id: 103,
       previous_stream_id: 102,
     });
+  });
+
+  it("reports previous_stream_id as null when nothing was selected before", async () => {
+    const setAudioStream = vi.fn().mockResolvedValue({
+      partId: "10",
+      selectedStreamId: 103,
+      previousStreamId: 0,
+    });
+    const plex = { setAudioStream } as unknown as PlexClient;
+    const tool = registerAndFind(plex, "plex_set_audio_stream");
+
+    const result = (await tool.handler({
+      rating_key: "100",
+      stream_id: 103,
+    })) as { content: Array<{ text: string }> };
+    expect(JSON.parse(result.content[0]!.text).previous_stream_id).toBeNull();
   });
 
   it("schema rejects stream_id 0 (there is no audio off)", () => {

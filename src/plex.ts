@@ -3,19 +3,11 @@ import { join, parse } from "node:path";
 import { describeTransportError } from "./errors.js";
 import { log } from "./log.js";
 import {
-  STREAM_PARAM_BY_KIND,
-  locateStream,
+  selectPartStreamParams,
   type StreamKind,
+  type StreamSelectionResult,
 } from "./stream-selection.js";
 import { annotateSubtitleStream } from "./subtitle.js";
-
-export interface StreamSelectionResult {
-  ratingKey: string;
-  partId: string;
-  kind: StreamKind;
-  selectedStreamId: number;
-  previousStreamId: number;
-}
 
 export interface PlexConfig {
   url: string;
@@ -949,7 +941,7 @@ export class PlexClient {
     streamId: number,
     partId?: string,
   ): Promise<StreamSelectionResult> {
-    return this.selectStream(ratingKey, "subtitle", streamId, partId);
+    return this.selectPartStream(ratingKey, "subtitle", streamId, partId);
   }
 
   /**
@@ -961,10 +953,10 @@ export class PlexClient {
     ratingKey: string,
     streamId: number,
   ): Promise<StreamSelectionResult> {
-    return this.selectStream(ratingKey, "audio", streamId);
+    return this.selectPartStream(ratingKey, "audio", streamId);
   }
 
-  private async selectStream(
+  private async selectPartStream(
     ratingKey: string,
     kind: StreamKind,
     streamId: number,
@@ -976,19 +968,17 @@ export class PlexClient {
     if (!item) {
       throw new Error(`item ${ratingKey} not found`);
     }
-    const location = locateStream(item, kind, streamId, partId);
+    const {
+      partId: targetPartId,
+      params,
+      result,
+    } = selectPartStreamParams(item, kind, streamId, partId);
     await this.requestNoContent(
-      `/library/parts/${location.partId}`,
-      { [STREAM_PARAM_BY_KIND[kind]]: String(streamId), allParts: "1" },
+      `/library/parts/${targetPartId}`,
+      params,
       "PUT",
     );
-    return {
-      ratingKey,
-      partId: location.partId,
-      kind,
-      selectedStreamId: streamId,
-      previousStreamId: location.previousStreamId,
-    };
+    return result;
   }
 
   /**

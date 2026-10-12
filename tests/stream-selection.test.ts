@@ -66,8 +66,16 @@ describe("locateStream", () => {
       /not a subtitle stream.*streamType 2/,
     );
     expect(() => locateStream(item, "audio", 104)).toThrow(
-      /not an? audio stream/,
+      "stream_id 104 is not an audio stream on this item (streamType 3, expected 2)",
     );
+  });
+
+  it("refuses a part_id that contradicts the stream's real part", () => {
+    expect(() => locateStream(item, "subtitle", 105, "20")).toThrow(
+      /belongs to part 10, not part_id 20/,
+    );
+    // A matching part_id is harmless.
+    expect(locateStream(item, "subtitle", 105, "10").partId).toBe("10");
   });
 
   it("refuses a stream id that is not on the item and lists what is", () => {
