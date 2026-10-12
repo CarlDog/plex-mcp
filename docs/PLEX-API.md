@@ -542,6 +542,29 @@ into later episodes).
   session tracker polling `plex_now_playing` against subtitle timestamps —
   a different shape of feature entirely, out of scope for a single tool).
 
+### Stream selection ✓ pkkid — shipped 2026-10-12
+
+`plex_set_subtitle_stream` / `plex_set_audio_stream`. The `setSelected()`
+python-plexapi method mentioned above is this: `MediaPart.
+setSelectedSubtitleStream()` / `setSelectedAudioStream()` (plexapi/media.py)
+issue `PUT /library/parts/{partId}?subtitleStreamID={id}&allParts=1`
+(`audioStreamID` for audio), same `X-Plex-Token` header auth as everything
+else here. Things worth knowing:
+
+- **Selection is per part, not per item.** Stream ids live in
+  `Media[].Part[].Stream[]`, and each Part has its own `id`. The tools
+  take a stream id and find the Part that owns it (`src/stream-selection.ts`),
+  which also validates that the id belongs to the item and has the right
+  `streamType` (2 audio, 3 subtitle). `allParts=1` copies the choice to the
+  other parts of the same Media (multi-file items).
+- **`subtitleStreamID=0` means off.** There is no audio equivalent; the
+  audio tool's schema enforces `stream_id >= 1`.
+- **Per account.** The selection is stored against the token's user, so
+  other Plex users on the server are unaffected. The `selected: true` flag
+  on a Stream in `getItem` reflects the token user's choice; the tools read
+  it before the PUT and return it as `previous_stream_id`.
+- **Empty 200 response**, as with the other `PUT` mutations here.
+
 ### Server log retrieval ✓ pkkid — shipped 2026-08-03
 
 Motivated by wanting an LLM assistant to help troubleshoot Plex issues

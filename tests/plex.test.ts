@@ -1137,6 +1137,117 @@ describe.skipIf(!hasEnv)("PlexClient (integration against live Plex)", () => {
     });
   });
 
+  describe("stream selection round trip", { concurrent: false }, () => {
+    type Stream = { id: number; streamType: number; selected?: boolean };
+    type Part = { id: number; Stream?: Stream[] };
+    type Candidate = { ratingKey: string; part: Part };
+
+    let candidate: Candidate | null = null;
+    let originalSubtitle = 0;
+    let originalAudio = 0;
+
+    const selectedOf = (part: Part, type: number) =>
+      part.Stream?.find((s) => s.streamType === type && s.selected)?.id ?? 0;
+
+    const firstPart = async (ratingKey: string): Promise<Part | undefined> => {
+      const item = (await client.getItem(ratingKey)) as {
+        Media?: Array<{ Part?: Part[] }>;
+      };
+      return item.Media?.[0]?.Part?.[0];
+    };
+
+    beforeAll(async () => {
+      // Discover an episode with at least one subtitle stream. Bounded:
+      // a library whose first 20 episodes carry no subtitles just skips.
+      const episodes = await client.browse(fixtures.showSectionId, {
+        type: 4,
+        limit: 20,
+      });
+      for (const ep of episodes.items as Array<{ ratingKey: string }>) {
+        const part = await firstPart(ep.ratingKey);
+        if (part?.Stream?.some((s) => s.streamType === 3)) {
+          candidate = { ratingKey: ep.ratingKey, part };
+          break;
+        }
+      }
+      if (!candidate) {
+        console.warn("[skip] no episode with subtitle streams found");
+        return;
+      }
+      originalSubtitle = selectedOf(candidate.part, 3);
+      originalAudio = selectedOf(candidate.part, 2);
+    });
+
+    afterAll(async () => {
+      if (!candidate) return;
+      try {
+        await client.setSubtitleStream(candidate.ratingKey, originalSubtitle);
+        if (originalAudio) {
+          await client.setAudioStream(candidate.ratingKey, originalAudio);
+        }
+      } catch {
+        // best-effort restore
+      }
+    });
+
+    it("selects a different subtitle stream (or off) and reads it back", async () => {
+      if (!candidate) return;
+      const subtitles = candidate.part.Stream!.filter(
+        (s) => s.streamType === 3,
+      );
+      // Prefer switching to another real track; fall back to "off" when
+      // the only track is already the selected one.
+      const other = subtitles.find((s) => s.id !== originalSubtitle);
+      const target = other ? other.id : 0;
+
+      const result = await client.setSubtitleStream(
+        candidate.ratingKey,
+        target,
+      );
+      expect(result.partId).toBe(String(candidate.part.id));
+      expect(result.selectedStreamId).toBe(target);
+      expect(result.previousStreamId).toBe(originalSubtitle);
+
+      const after = await firstPart(candidate.ratingKey);
+      expect(selectedOf(after!, 3)).toBe(target);
+    });
+
+    it("restores the original subtitle selection", async () => {
+      if (!candidate) return;
+      await client.setSubtitleStream(candidate.ratingKey, originalSubtitle);
+      const after = await firstPart(candidate.ratingKey);
+      expect(selectedOf(after!, 3)).toBe(originalSubtitle);
+    });
+
+    it("switches audio to another stream when the item has two, then restores", async () => {
+      if (!candidate) return;
+      const audio = candidate.part.Stream!.filter((s) => s.streamType === 2);
+      const other = audio.find((s) => s.id !== originalAudio);
+      if (!other || !originalAudio) {
+        console.warn("[skip] candidate has fewer than two audio streams");
+        return;
+      }
+
+      const result = await client.setAudioStream(candidate.ratingKey, other.id);
+      expect(result.previousStreamId).toBe(originalAudio);
+      let after = await firstPart(candidate.ratingKey);
+      expect(selectedOf(after!, 2)).toBe(other.id);
+
+      await client.setAudioStream(candidate.ratingKey, originalAudio);
+      after = await firstPart(candidate.ratingKey);
+      expect(selectedOf(after!, 2)).toBe(originalAudio);
+    });
+
+    it("refuses an id that is not a subtitle stream without calling Plex", async () => {
+      if (!candidate) return;
+      const video = candidate.part.Stream!.find((s) => s.streamType === 1);
+      if (!video) return;
+      await expect(
+        client.setSubtitleStream(candidate.ratingKey, video.id),
+      ).rejects.toThrow(/not a subtitle stream/);
+    });
+  });
+
   // Disable concurrency because we don't want parallel mutations on the
   // same item across other (hypothetical future) write tests.
   describe(

@@ -104,4 +104,81 @@ export function registerPlaybackTools(
       },
     ),
   );
+
+  server.registerTool(
+    "plex_set_subtitle_stream",
+    {
+      title: "Select Plex Subtitle Stream",
+      description:
+        "Select which subtitle track plays for an item (mutates server state). Pass a stream id from the item's Media[].Part[].Stream[] (plex_get_item with minimal=true lists subtitle streams with id, language, codec and hearingImpaired); the owning media part is resolved automatically and the id is verified to be a subtitle stream on this item. Pass stream_id=0 to turn subtitles off. Selection is per Plex account (the PLEX_TOKEN user) and applies to the item's playable parts. Reversible: the response includes previous_stream_id — call again with it to restore.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe(
+            "The Plex rating key of the playable item (episode, movie, track).",
+          ),
+        stream_id: z
+          .number()
+          .int()
+          .min(0)
+          .describe(
+            "The subtitle stream's id from Media[].Part[].Stream[], or 0 to turn subtitles off.",
+          ),
+        part_id: z
+          .string()
+          .optional()
+          .describe(
+            "Only used with stream_id=0 on items with several media parts: the Media.Part id to turn subtitles off on. Defaults to the first part.",
+          ),
+      },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
+    },
+    withLogging(
+      "plex_set_subtitle_stream",
+      async ({ rating_key, stream_id, part_id }) => {
+        const result = await plex.setSubtitleStream(
+          rating_key,
+          stream_id,
+          part_id,
+        );
+        return asText({
+          rating_key,
+          part_id: result.partId,
+          selected_stream_id: result.selectedStreamId,
+          previous_stream_id: result.previousStreamId,
+        });
+      },
+    ),
+  );
+
+  server.registerTool(
+    "plex_set_audio_stream",
+    {
+      title: "Select Plex Audio Stream",
+      description:
+        "Select which audio track plays for an item (mutates server state). Pass a stream id from the item's Media[].Part[].Stream[] (streamType 2 entries in the full plex_get_item response — minimal mode drops audio streams); the owning media part is resolved automatically and the id is verified to be an audio stream on this item. There is no 'off' for audio. Selection is per Plex account (the PLEX_TOKEN user). Reversible: the response includes previous_stream_id — call again with it to restore.",
+      inputSchema: {
+        rating_key: z
+          .string()
+          .describe(
+            "The Plex rating key of the playable item (episode, movie, track).",
+          ),
+        stream_id: z
+          .number()
+          .int()
+          .min(1)
+          .describe("The audio stream's id from Media[].Part[].Stream[]."),
+      },
+      annotations: SAFE_IDEMPOTENT_WRITE_ANNOTATIONS,
+    },
+    withLogging("plex_set_audio_stream", async ({ rating_key, stream_id }) => {
+      const result = await plex.setAudioStream(rating_key, stream_id);
+      return asText({
+        rating_key,
+        part_id: result.partId,
+        selected_stream_id: result.selectedStreamId,
+        previous_stream_id: result.previousStreamId,
+      });
+    }),
+  );
 }

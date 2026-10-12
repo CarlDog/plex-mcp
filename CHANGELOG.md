@@ -13,6 +13,15 @@ the work rather than after the fact.
 
 ### Added
 
+- `plex_set_subtitle_stream(rating_key, stream_id, part_id?)` and
+  `plex_set_audio_stream(rating_key, stream_id)` — select which subtitle or
+  audio track plays for an item, via
+  `PUT /library/parts/{partId}?subtitleStreamID|audioStreamID={id}&allParts=1`.
+  The owning media part is resolved from the stream id and the id is
+  verified to be the right kind of stream on that item before anything is
+  sent (`src/stream-selection.ts`). `stream_id=0` turns subtitles off; audio
+  has no off. Both return `previous_stream_id` so the change can be reverted.
+  Selection is per Plex account.
 - `plex_find_by_external_id(section_id, source, external_id)` — resolves exact
   IMDb/TMDB/TVDB child GUIDs through a bounded, section-scoped
   `includeGuids=1` page scan. It returns every match plus explicit
