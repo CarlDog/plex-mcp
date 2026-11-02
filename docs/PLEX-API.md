@@ -489,8 +489,10 @@ Built since the table above was last swept: collections support
 filter — 2026-08-03), subtitle *discovery* (`plex_get_item`'s minimal
 mode now keeps subtitle-track `Stream[]` entries — 2026-08-03, see
 below), server log retrieval (`plex_download_logs` — 2026-08-03, see
-below), and poster management (`plex_list_posters`, `plex_set_poster`,
-`plex_upload_poster` — 2026-08-03, see below).
+below), poster management (`plex_list_posters`, `plex_set_poster`,
+`plex_upload_poster` — 2026-08-03, see below), and stream selection
+(`plex_set_subtitle_stream`, `plex_set_audio_stream` — 2026-10-12, see
+below).
 
 ### Subtitle discovery — done; content fetch — declined (2026-08-03)
 
@@ -541,6 +543,39 @@ into later episodes).
   tool) vs. live position-correlated interjections (needs an active
   session tracker polling `plex_now_playing` against subtitle timestamps —
   a different shape of feature entirely, out of scope for a single tool).
+
+### Stream selection ✓ pkkid — shipped 2026-10-12
+
+Motivated by wanting to pick the subtitle track for tonight's episode from
+the assistant ahead of time, instead of clicking through the player's
+audio/subtitle menu on every start — the `setSelected()` python-plexapi
+method the subtitle-discovery section above mentions in passing is exactly
+this capability.
+
+- **`PUT /library/parts/{partId}?subtitleStreamID={id}&allParts=1`**
+  (`audioStreamID` for audio), same `X-Plex-Token` header auth as every
+  other call in this repo. Confirmed against python-plexapi's
+  `MediaPart.setSelectedSubtitleStream()` / `setSelectedAudioStream()`
+  (plexapi/media.py) — then confirmed for real against this server
+  (2026-10-12): subtitle switch + restore on an episode and audio switch +
+  restore on a movie with two tracks, `selected` flag read back correctly
+  each time, no client-identity headers needed.
+- **Selection is per part, not per item.** Stream ids live in
+  `Media[].Part[].Stream[]`, and each Part has its own `id`. The tools
+  take a stream id and find the Part that owns it (`src/stream-selection.ts`),
+  which also validates that the id belongs to the item and has the right
+  `streamType` (2 audio, 3 subtitle). `allParts=1` copies the choice to the
+  other parts of the same Media (multi-file items).
+- **`subtitleStreamID=0` means off.** There is no audio equivalent; the
+  audio tool's schema enforces `stream_id >= 1`.
+- **Per account.** The selection is stored against the token's user, so
+  other Plex users on the server are unaffected. The `selected: true` flag
+  on a Stream in `getItem` reflects the token user's choice; the tools read
+  it before the PUT and return it as `previous_stream_id`. When no stream
+  of that kind carries `selected: true` (Plex falling back to its default),
+  subtitles report `0` (= off, restorable) and audio reports `null` (not
+  restorable through this tool, since there is no `audioStreamID=0`).
+- **Empty 200 response**, as with the other `PUT` mutations here.
 
 ### Server log retrieval ✓ pkkid — shipped 2026-08-03
 
