@@ -1,6 +1,18 @@
 # Status
 
-**Last updated:** 2026-09-01 — added the read-only
+**Last updated:** 2026-10-12 — added `plex_set_subtitle_stream` and
+`plex_set_audio_stream`, both through
+`PUT /library/parts/{partId}?subtitleStreamID|audioStreamID={id}&allParts=1`.
+The part is resolved from the stream id and the id is validated against the
+item's `Media[].Part[].Stream[]` in a pure module (`src/stream-selection.ts`)
+before any request is sent. `stream_id=0` turns subtitles off; audio has no
+off. Responses carry `previous_stream_id` for undo. Verified live against the
+real server: subtitle switch + restore on an episode and audio switch +
+restore on a movie with two tracks; no client-identity headers needed, empty
+200 as with the other `PUT` mutations. 16 new offline tests (locator + tool
+wiring) plus a gated live round-trip in `tests/plex.test.ts`; build,
+typecheck, lint and formatting pass.
+Previous entry, 2026-09-01 — added the read-only
 `plex_find_by_external_id` tool. It performs a bounded, section-scoped
 `includeGuids=1` scan, compares exact child GUIDs, returns all matches, and
 reports whether the result is complete or truncated. This avoids Plex's direct
