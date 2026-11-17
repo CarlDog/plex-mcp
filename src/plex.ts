@@ -2,6 +2,11 @@ import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, parse } from "node:path";
 import { describeTransportError } from "./errors.js";
 import { log } from "./log.js";
+import {
+  selectPartStreamParams,
+  type StreamKind,
+  type StreamSelectionResult,
+} from "./stream-selection.js";
 import { annotateSubtitleStream } from "./subtitle.js";
 
 export interface PlexConfig {
@@ -916,6 +921,64 @@ export class PlexClient {
       { ratingKey },
       "PUT",
     );
+  }
+
+  /**
+   * Select which subtitle stream plays for an item. `streamId` 0 turns
+   * subtitles off. The owning Media.Part is derived from the stream id
+   * (see `locateStream`); `partId` only matters for `0`, where there is
+   * no stream to derive it from and the item has several parts.
+   *
+   * `PUT /library/parts/{partId}?subtitleStreamID={id}&allParts=1` —
+   * the call python-plexapi's `MediaPart.setSelectedSubtitleStream()` /
+   * `SubtitleStream.setSelected()` make (plexapi/media.py). `allParts=1`
+   * applies the choice to every part of the same Media (multi-file
+   * items). Selection is stored per Plex account, so it affects only
+   * the `PLEX_TOKEN` user's playback. Empty 200 response.
+   */
+  async setSubtitleStream(
+    ratingKey: string,
+    streamId: number,
+    partId?: string,
+  ): Promise<StreamSelectionResult> {
+    return this.selectPartStream(ratingKey, "subtitle", streamId, partId);
+  }
+
+  /**
+   * Select which audio stream plays for an item. Same endpoint as
+   * `setSubtitleStream` with `audioStreamID`; there is no "off" value
+   * for audio, so `streamId` must name a real audio stream on the item.
+   */
+  async setAudioStream(
+    ratingKey: string,
+    streamId: number,
+  ): Promise<StreamSelectionResult> {
+    return this.selectPartStream(ratingKey, "audio", streamId);
+  }
+
+  private async selectPartStream(
+    ratingKey: string,
+    kind: StreamKind,
+    streamId: number,
+    partId?: string,
+  ): Promise<StreamSelectionResult> {
+    // Full getItem, not minimal: minimal mode drops audio streams.
+    const item = (await this.getItem(ratingKey)) as
+      Record<string, unknown> | undefined;
+    if (!item) {
+      throw new Error(`item ${ratingKey} not found`);
+    }
+    const {
+      partId: targetPartId,
+      params,
+      result,
+    } = selectPartStreamParams(item, kind, streamId, partId);
+    await this.requestNoContent(
+      `/library/parts/${targetPartId}`,
+      params,
+      "PUT",
+    );
+    return result;
   }
 
   /**
